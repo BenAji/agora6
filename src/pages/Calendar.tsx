@@ -138,7 +138,9 @@ const CalendarPage: React.FC = () => {
   const getEventsForCompanyAndDay = (company: Company, day: Date) => {
     return events.filter(event => 
       isSameDay(new Date(event.startDate), day) && 
-      event.companyID === company.companyID
+      (event.companyID === company.companyID || 
+       event.hostCompany?.toLowerCase().includes(company.companyName.toLowerCase()) ||
+       company.companyName.toLowerCase().includes(event.hostCompany?.toLowerCase() || ''))
     );
   };
 
