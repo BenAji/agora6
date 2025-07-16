@@ -23,6 +23,8 @@ interface Subscription {
   subID: string;
   userID: string;
   status: string;
+  gicsSector?: string;
+  gicsSubCategory?: string;
 }
 
 const Companies: React.FC = () => {
@@ -43,7 +45,7 @@ const Companies: React.FC = () => {
             .order('companyName'),
           user ? supabase
             .from('subscriptions')
-            .select('*')
+            .select('subID, userID, status, gicsSector, gicsSubCategory')
             .eq('userID', user.id)
             .eq('status', 'ACTIVE') : { data: [], error: null }
         ]);
@@ -67,6 +69,14 @@ const Companies: React.FC = () => {
     return subscriptions.some(sub => 
       sub.userID === user?.id && 
       sub.status === 'ACTIVE'
+    );
+  };
+
+  const isSubscribedToSector = (sector: string) => {
+    return subscriptions.some(sub => 
+      sub.userID === user?.id && 
+      sub.status === 'ACTIVE' &&
+      sub.gicsSector === sector
     );
   };
 
@@ -135,14 +145,20 @@ const Companies: React.FC = () => {
       // Check for errors
       const errors = results.filter(result => result.error);
       if (errors.length > 0) {
+        console.error('Subscription errors:', errors);
         throw new Error(`Failed to subscribe to ${errors.length} sectors`);
       }
 
-      // Update local state
+      // Log successful subscriptions
+      console.log('Successfully created subscriptions for sectors:', selectedSectors);
+
+      // Update local state with the actual sector data
       const newSubscriptions = selectedSectors.map(sector => ({
         subID: crypto.randomUUID(),
         userID: user.id,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        gicsSector: sector,
+        gicsSubCategory: null
       }));
       setSubscriptions(prev => [...prev, ...newSubscriptions]);
 
@@ -204,21 +220,29 @@ const Companies: React.FC = () => {
               <p className="text-text-secondary mb-4">Select multiple sectors to subscribe to all companies within those sectors</p>
               
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-                {uniqueSectors.map((sector) => (
-                  <div key={sector} className="flex items-center space-x-2">
-                    <Checkbox 
-                      id={sector}
-                      checked={selectedSectors.includes(sector)}
-                      onCheckedChange={() => handleSectorToggle(sector)}
-                    />
-                    <label 
-                      htmlFor={sector} 
-                      className="text-sm text-text-primary cursor-pointer hover:text-gold transition-colors"
-                    >
-                      {sector}
-                    </label>
-                  </div>
-                ))}
+                {uniqueSectors.map((sector) => {
+                  const isAlreadySubscribed = isSubscribedToSector(sector);
+                  return (
+                    <div key={sector} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={sector}
+                        checked={selectedSectors.includes(sector) || isAlreadySubscribed}
+                        disabled={isAlreadySubscribed}
+                        onCheckedChange={() => handleSectorToggle(sector)}
+                      />
+                      <label 
+                        htmlFor={sector} 
+                        className={`text-sm cursor-pointer transition-colors ${
+                          isAlreadySubscribed 
+                            ? 'text-success' 
+                            : 'text-text-primary hover:text-gold'
+                        }`}
+                      >
+                        {sector} {isAlreadySubscribed && '✓'}
+                      </label>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex items-center gap-4">
