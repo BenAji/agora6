@@ -26,8 +26,6 @@ interface Subscription {
   status: string;
   gicsSector?: string;
   gicsSubCategory?: string;
-  tickerSymbol?: string;
-  companyName?: string;
 }
 
 const Companies: React.FC = () => {
@@ -50,7 +48,7 @@ const Companies: React.FC = () => {
             .order('companyName'),
           user ? supabase
             .from('subscriptions')
-            .select('subID, userID, status, gicsSector, gicsSubCategory, tickerSymbol, companyName')
+            .select('subID, userID, status, gicsSector, gicsSubCategory')
             .eq('userID', user.id)
             .eq('status', 'ACTIVE') : { data: [], error: null }
         ]);
@@ -76,11 +74,11 @@ const Companies: React.FC = () => {
     fetchData();
   }, [user]);
 
-  const isSubscribedToCompany = (tickerSymbol: string) => {
+  const isSubscribedToCompany = (company: GicsCompany) => {
     return subscriptions.some(sub => 
       sub.userID === user?.id && 
       sub.status === 'ACTIVE' &&
-      sub.tickerSymbol === tickerSymbol
+      sub.gicsSector === company.gicsSector
     );
   };
 
@@ -88,12 +86,11 @@ const Companies: React.FC = () => {
     return subscriptions.some(sub => 
       sub.userID === user?.id && 
       sub.status === 'ACTIVE' &&
-      sub.gicsSector === sector &&
-      !sub.tickerSymbol // Sector-level subscription (not company-specific)
+      sub.gicsSector === sector
     );
   };
 
-  const handleSubscribe = async (tickerSymbol: string, companyName: string, gicsSector: string, gicsSubCategory: string) => {
+  const handleSubscribe = async (gicsSector: string, gicsSubCategory: string) => {
     if (!user) return;
 
     try {
@@ -104,9 +101,7 @@ const Companies: React.FC = () => {
           status: 'ACTIVE',
           subStart: new Date().toISOString(),
           gicsSector: gicsSector,
-          gicsSubCategory: gicsSubCategory,
-          tickerSymbol: tickerSymbol,
-          companyName: companyName
+          gicsSubCategory: gicsSubCategory
         });
 
       if (error) throw error;
@@ -117,13 +112,11 @@ const Companies: React.FC = () => {
         userID: user.id,
         status: 'ACTIVE',
         gicsSector: gicsSector,
-        gicsSubCategory: gicsSubCategory,
-        tickerSymbol: tickerSymbol,
-        companyName: companyName
+        gicsSubCategory: gicsSubCategory
       };
       setSubscriptions(prev => [...prev, newSubscription]);
 
-      toast.success(`Subscribed to ${companyName} (${tickerSymbol})`);
+      toast.success(`Subscribed to ${gicsSector} sector`);
     } catch (error) {
       console.error('Error subscribing:', error);
       toast.error('Failed to subscribe');
@@ -167,19 +160,16 @@ const Companies: React.FC = () => {
 
       console.log('Companies to subscribe to:', companiesToSubscribe.map(c => `${c.companyName} (${c.tickerSymbol})`));
 
-      // Create individual company subscriptions for each company in selected sectors
-      const subscriptionPromises = companiesToSubscribe.map(async (company) => {
-        console.log('Creating subscription for company:', company.companyName, 'in sector:', company.gicsSector);
+      // Create sector-level subscriptions for selected sectors
+      const subscriptionPromises = selectedSectors.map(async (sector) => {
+        console.log('Creating subscription for sector:', sector);
         return await supabase
           .from('subscriptions')
           .insert({
             userID: user.id,
             status: 'ACTIVE',
             subStart: new Date().toISOString(),
-            gicsSector: company.gicsSector,
-            gicsSubCategory: company.gicsSubCategory,
-            tickerSymbol: company.tickerSymbol,
-            companyName: company.companyName
+            gicsSector: sector
           });
       });
 
@@ -200,7 +190,7 @@ const Companies: React.FC = () => {
       // Refresh subscriptions data
       const { data: updatedSubscriptions, error: fetchError } = await supabase
         .from('subscriptions')
-        .select('subID, userID, status, gicsSector, gicsSubCategory, tickerSymbol, companyName')
+        .select('subID, userID, status, gicsSector, gicsSubCategory')
         .eq('userID', user.id)
         .eq('status', 'ACTIVE');
 
@@ -210,7 +200,7 @@ const Companies: React.FC = () => {
         setSubscriptions(updatedSubscriptions || []);
       }
 
-      toast.success(`Successfully subscribed to ${companiesToSubscribe.length} companies in ${selectedSectors.length} sector(s)`);
+      toast.success(`Successfully subscribed to ${selectedSectors.length} sector(s)`);
       setSelectedSectors([]);
     } catch (error) {
       console.error('Error bulk subscribing:', error);
@@ -220,7 +210,7 @@ const Companies: React.FC = () => {
     }
   };
 
-  const handleUnsubscribe = async (tickerSymbol: string, companyName: string) => {
+  const handleUnsubscribe = async (gicsSector: string) => {
     if (!user) return;
 
     try {
@@ -228,13 +218,13 @@ const Companies: React.FC = () => {
         .from('subscriptions')
         .update({ status: 'INACTIVE' })
         .eq('userID', user.id)
-        .eq('tickerSymbol', tickerSymbol)
+        .eq('gicsSector', gicsSector)
         .eq('status', 'ACTIVE');
 
       if (error) throw error;
 
-      setSubscriptions(prev => prev.filter(sub => !(sub.tickerSymbol === tickerSymbol && sub.status === 'ACTIVE')));
-      toast.success(`Unsubscribed from ${companyName} (${tickerSymbol})`);
+      setSubscriptions(prev => prev.filter(sub => !(sub.gicsSector === gicsSector && sub.status === 'ACTIVE')));
+      toast.success(`Unsubscribed from ${gicsSector} sector`);
     } catch (error) {
       console.error('Error unsubscribing:', error);
       toast.error('Failed to unsubscribe');
@@ -355,25 +345,25 @@ const Companies: React.FC = () => {
                     </div>
                     
                     <div className="flex gap-2">
-                      {isSubscribedToCompany(company.tickerSymbol) ? (
+                      {isSubscribedToCompany(company) ? (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleUnsubscribe(company.tickerSymbol, company.companyName)}
+                          onClick={() => handleUnsubscribe(company.gicsSector)}
                           className="flex-1"
                         >
                           <BellOff className="mr-2 h-3 w-3" />
-                          Unsubscribe
+                          Unsubscribe from Sector
                         </Button>
                       ) : (
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => handleSubscribe(company.tickerSymbol, company.companyName, company.gicsSector, company.gicsSubCategory)}
+                          onClick={() => handleSubscribe(company.gicsSector, company.gicsSubCategory)}
                           className="flex-1"
                         >
                           <Bell className="mr-2 h-3 w-3" />
-                          Subscribe
+                          Subscribe to Sector
                         </Button>
                       )}
                     </div>
