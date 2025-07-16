@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import DashboardStats from '@/components/DashboardStats';
 import EventCard from '@/components/EventCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, CalendarIcon, TrendingUp } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Plus, CalendarIcon, Clock, MapPin, Users, Building2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import CreateEventDialog from '@/components/CreateEventDialog';
@@ -24,7 +27,10 @@ const Dashboard: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [createEventOpen, setCreateEventOpen] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [eventDetailsOpen, setEventDetailsOpen] = useState(false);
   const { profile } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchEvents();
@@ -48,6 +54,28 @@ const Dashboard: React.FC = () => {
   };
 
   const canCreateEvents = profile?.role === 'IR_ADMIN';
+
+  const handleViewDetails = (event: any) => {
+    const fullEvent = events.find(e => e.eventID === event.id);
+    if (fullEvent) {
+      setSelectedEvent(fullEvent);
+      setEventDetailsOpen(true);
+    }
+  };
+
+  const handleViewAllEvents = () => {
+    navigate('/events');
+  };
+
+  const getEventStatus = (startDate: string, endDate: string | null) => {
+    const now = new Date();
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : start;
+    
+    if (now > end) return 'completed';
+    if (now >= start && now <= end) return 'ongoing';
+    return 'upcoming';
+  };
 
   return (
     <Layout currentPage="dashboard">
@@ -82,7 +110,7 @@ const Dashboard: React.FC = () => {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="text-gold">Recent Events</CardTitle>
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" onClick={handleViewAllEvents}>
                 View All Events
               </Button>
             </div>
@@ -119,9 +147,13 @@ const Dashboard: React.FC = () => {
                       }),
                       location: event.location || 'TBD',
                       attendees: 0,
-                      status: 'upcoming' as const,
+                      status: getEventStatus(event.startDate, event.endDate),
                       rsvpStatus: 'pending' as const,
-                    }} 
+                      startDate: event.startDate,
+                      endDate: event.endDate,
+                      description: event.description,
+                    }}
+                    onViewDetails={handleViewDetails}
                   />
                 ))}
               </div>
@@ -136,6 +168,83 @@ const Dashboard: React.FC = () => {
             onEventCreated={fetchEvents}
           />
         )}
+
+        {/* Event Details Dialog */}
+        <Dialog open={eventDetailsOpen} onOpenChange={setEventDetailsOpen}>
+          <DialogContent className="max-w-2xl bg-surface-primary border border-border-default">
+            <DialogHeader>
+              <DialogTitle className="text-gold text-xl">
+                {selectedEvent?.eventName}
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedEvent && (
+              <div className="space-y-6">
+                <div className="flex gap-2">
+                  <Badge className="bg-chart-quaternary text-black">
+                    {selectedEvent.eventType}
+                  </Badge>
+                  <Badge className={`text-black ${
+                    getEventStatus(selectedEvent.startDate, selectedEvent.endDate) === 'completed' 
+                      ? 'bg-text-muted' 
+                      : getEventStatus(selectedEvent.startDate, selectedEvent.endDate) === 'ongoing'
+                      ? 'bg-success'
+                      : 'bg-chart-quaternary'
+                  }`}>
+                    {getEventStatus(selectedEvent.startDate, selectedEvent.endDate)}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center text-text-secondary">
+                    <Building2 className="mr-3 h-5 w-5 text-gold" />
+                    <div>
+                      <div className="text-sm font-medium">Company</div>
+                      <div>{selectedEvent.hostCompany || 'TBD'}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center text-text-secondary">
+                    <CalendarIcon className="mr-3 h-5 w-5 text-gold" />
+                    <div>
+                      <div className="text-sm font-medium">Date & Time</div>
+                      <div>{new Date(selectedEvent.startDate).toLocaleDateString()}</div>
+                      <div className="text-sm">{new Date(selectedEvent.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center text-text-secondary">
+                    <MapPin className="mr-3 h-5 w-5 text-gold" />
+                    <div>
+                      <div className="text-sm font-medium">Location</div>
+                      <div>{selectedEvent.location || 'TBD'}</div>
+                    </div>
+                  </div>
+
+                  {selectedEvent.endDate && (
+                    <div className="flex items-center text-text-secondary">
+                      <Clock className="mr-3 h-5 w-5 text-gold" />
+                      <div>
+                        <div className="text-sm font-medium">End Date</div>
+                        <div>{new Date(selectedEvent.endDate).toLocaleDateString()}</div>
+                        <div className="text-sm">{new Date(selectedEvent.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {selectedEvent.description && (
+                  <div>
+                    <div className="text-sm font-medium text-text-secondary mb-2">Description</div>
+                    <div className="text-text-primary bg-surface-secondary p-4 rounded-lg border border-border-default">
+                      {selectedEvent.description}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
