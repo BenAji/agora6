@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChevronLeft, ChevronRight, Download, Filter } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameDay, isSameMonth, isToday } from 'date-fns';
 
 interface Event {
   eventID: string;
@@ -21,10 +22,10 @@ interface Company {
   companyName: string;
 }
 
-const Calendar: React.FC = () => {
-  const [currentWeek, setCurrentWeek] = useState(new Date());
+const CalendarPage: React.FC = () => {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [events, setEvents] = useState<Event[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [loading, setLoading] = useState(true);
   const { profile } = useAuth();
 
@@ -35,35 +36,25 @@ const Calendar: React.FC = () => {
     if (canAccessCalendar) {
       fetchData();
     }
-  }, [canAccessCalendar, currentWeek]);
+  }, [canAccessCalendar, currentMonth]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       
-      // Fetch events for the current month
-      const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
-      const monthStart = addDays(weekStart, -7); // Extra week for buffer
-      const monthEnd = addDays(weekStart, 35); // 5 weeks
+      // Fetch events for the current month with buffer
+      const monthStart = startOfWeek(startOfMonth(currentMonth));
+      const monthEnd = endOfWeek(endOfMonth(currentMonth));
 
-      const [eventsData, companiesData] = await Promise.all([
-        supabase
-          .from('events')
-          .select('*')
-          .gte('startDate', monthStart.toISOString())
-          .lte('startDate', monthEnd.toISOString())
-          .order('startDate'),
-        supabase
-          .from('user_companies')
-          .select('companyID, companyName')
-          .order('companyName')
-      ]);
+      const { data: eventsData, error } = await supabase
+        .from('events')
+        .select('*, user_companies(companyName)')
+        .gte('startDate', monthStart.toISOString())
+        .lte('startDate', monthEnd.toISOString())
+        .order('startDate');
 
-      if (eventsData.error) throw eventsData.error;
-      if (companiesData.error) throw companiesData.error;
-
-      setEvents(eventsData.data || []);
-      setCompanies(companiesData.data || []);
+      if (error) throw error;
+      setEvents(eventsData || []);
     } catch (error) {
       console.error('Error fetching calendar data:', error);
     } finally {
@@ -71,24 +62,30 @@ const Calendar: React.FC = () => {
     }
   };
 
-  const goToPreviousWeek = () => {
-    setCurrentWeek(subWeeks(currentWeek, 1));
+  const goToPreviousMonth = () => {
+    setCurrentMonth(subMonths(currentMonth, 1));
   };
 
-  const goToNextWeek = () => {
-    setCurrentWeek(addWeeks(currentWeek, 1));
+  const goToNextMonth = () => {
+    setCurrentMonth(addMonths(currentMonth, 1));
   };
 
-  const getWeekDays = () => {
-    const start = startOfWeek(currentWeek, { weekStartsOn: 1 });
-    return Array.from({ length: 5 }, (_, i) => addDays(start, i));
+  const getEventsForDay = (day: Date) => {
+    return events.filter(event => isSameDay(new Date(event.startDate), day));
   };
 
-  const getEventsForCompanyAndDay = (company: Company, day: Date) => {
-    return events.filter(event => 
-      event.hostCompany === company.companyName && 
-      isSameDay(new Date(event.startDate), day)
-    );
+  const getCalendarDays = () => {
+    const start = startOfWeek(startOfMonth(currentMonth));
+    const end = endOfWeek(endOfMonth(currentMonth));
+    const days = [];
+    let day = start;
+
+    while (day <= end) {
+      days.push(day);
+      day = addDays(day, 1);
+    }
+
+    return days;
   };
 
   const getEventTypeColor = (eventType: string) => {
@@ -121,7 +118,7 @@ const Calendar: React.FC = () => {
     );
   }
 
-  const weekDays = getWeekDays();
+  const calendarDays = getCalendarDays();
 
   return (
     <Layout currentPage="calendar">
@@ -131,7 +128,7 @@ const Calendar: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gold mb-2">Calendar</h1>
             <p className="text-text-secondary">
-              Company-based event calendar view
+              Professional monthly event calendar
             </p>
           </div>
           <div className="flex gap-3">
@@ -146,134 +143,202 @@ const Calendar: React.FC = () => {
           </div>
         </div>
 
-        {/* Week Navigation */}
-        <Card variant="terminal">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <Button variant="ghost" size="sm" onClick={goToPreviousWeek}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              
-              <div className="text-center">
-                <h2 className="text-xl font-bold text-gold">
-                  {format(weekDays[0], 'MMM d')} - {format(weekDays[4], 'MMM d, yyyy')}
-                </h2>
-              </div>
-              
-              <Button variant="ghost" size="sm" onClick={goToNextWeek}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Calendar Sidebar */}
+          <div className="space-y-6">
+            {/* Month Navigation */}
+            <Card variant="terminal">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <Button variant="ghost" size="sm" onClick={goToPreviousMonth}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <CardTitle className="text-gold font-mono">
+                    {format(currentMonth, 'MMMM yyyy')}
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={goToNextMonth}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={setSelectedDate}
+                  month={currentMonth}
+                  onMonthChange={setCurrentMonth}
+                  className="p-0"
+                  classNames={{
+                    months: "flex flex-col space-y-0",
+                    month: "space-y-0",
+                    caption: "hidden",
+                    table: "w-full border-collapse",
+                    head_row: "flex",
+                    head_cell: "text-gold text-xs font-mono w-8 h-8 flex items-center justify-center",
+                    row: "flex w-full",
+                    cell: "h-8 w-8 text-center text-xs relative p-0 [&:has([aria-selected])]:bg-gold/20",
+                    day: "h-8 w-8 p-0 font-normal hover:bg-surface-secondary",
+                    day_selected: "bg-gold text-black font-bold",
+                    day_today: "bg-gold/20 text-gold font-bold",
+                    day_outside: "text-text-muted opacity-50",
+                  }}
+                />
+              </CardContent>
+            </Card>
 
-        {/* Calendar Grid */}
-        <Card variant="terminal">
-          <CardHeader>
-            <CardTitle className="text-gold">Weekly View</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="p-8 text-center">
-                <div className="text-text-secondary">Loading calendar...</div>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border-default">
-                      <th className="text-left p-4 w-48 text-gold font-mono">Company</th>
-                      {weekDays.map((day) => (
-                        <th key={day.toISOString()} className="text-center p-4 min-w-[200px]">
-                          <div className="text-gold font-mono">
-                            {format(day, 'EEE')}
-                          </div>
-                          <div className="text-text-secondary text-sm">
-                            {format(day, 'MMM d')}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {companies.map((company) => (
-                      <tr key={company.companyID} className="border-b border-border-default hover:bg-surface-secondary/50">
-                        <td className="p-4 border-r border-border-default">
-                          <div className="font-semibold text-text-primary truncate">
-                            {company.companyName}
-                          </div>
-                        </td>
-                        {weekDays.map((day) => {
-                          const dayEvents = getEventsForCompanyAndDay(company, day);
-                          return (
-                            <td key={`${company.companyID}-${day.toISOString()}`} className="p-2 align-top">
-                              <div className="space-y-1">
-                                {dayEvents.map((event) => (
-                                  <div
-                                    key={event.eventID}
-                                    className={`
-                                      p-2 rounded text-xs border cursor-pointer
-                                      transition-all duration-200 hover:scale-105
-                                      ${getEventTypeColor(event.eventType)}
-                                    `}
-                                    title={`${event.eventName}\n${event.location}\n${format(new Date(event.startDate), 'h:mm a')}`}
-                                  >
-                                    <div className="font-semibold truncate">
-                                      {event.eventName}
-                                    </div>
-                                    <div className="text-xs opacity-80">
-                                      {format(new Date(event.startDate), 'h:mm a')}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
+            {/* Event Types Legend */}
+            <Card variant="terminal">
+              <CardHeader>
+                <CardTitle className="text-gold text-sm">Event Types</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {[
+                  { type: 'EARNINGS_CALL', label: 'Earnings Call' },
+                  { type: 'INVESTOR_MEETING', label: 'Investor Meeting' },
+                  { type: 'CONFERENCE', label: 'Conference' },
+                  { type: 'ROADSHOW', label: 'Roadshow' },
+                  { type: 'ANALYST_DAY', label: 'Analyst Day' },
+                  { type: 'PRODUCT_LAUNCH', label: 'Product Launch' },
+                  { type: 'OTHER', label: 'Other' }
+                ].map(({ type, label }) => (
+                  <div key={type} className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded border ${getEventTypeColor(type)}`}></div>
+                    <span className="text-xs text-text-secondary">{label}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Main Calendar Grid */}
+          <div className="lg:col-span-3">
+            <Card variant="terminal">
+              <CardHeader>
+                <CardTitle className="text-gold flex items-center">
+                  <CalendarDays className="mr-2 h-5 w-5" />
+                  {format(currentMonth, 'MMMM yyyy')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                {loading ? (
+                  <div className="flex items-center justify-center h-96">
+                    <div className="text-text-secondary">Loading calendar...</div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-7 gap-1">
+                    {/* Day Headers */}
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+                      <div key={day} className="p-2 text-center text-gold font-mono text-sm font-bold">
+                        {day}
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-                
-                {companies.length === 0 && (
-                  <div className="p-8 text-center text-text-secondary">
-                    No companies found
+                    
+                    {/* Calendar Days */}
+                    {calendarDays.map((day) => {
+                      const dayEvents = getEventsForDay(day);
+                      const isCurrentMonth = isSameMonth(day, currentMonth);
+                      const isDayToday = isToday(day);
+                      const isSelected = selectedDate && isSameDay(day, selectedDate);
+
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          className={`
+                            min-h-[120px] p-2 border border-border-default
+                            cursor-pointer transition-all duration-200 hover:bg-surface-secondary/50
+                            ${!isCurrentMonth ? 'bg-surface-secondary/20 text-text-muted' : 'bg-surface-primary'}
+                            ${isDayToday ? 'ring-2 ring-gold ring-inset' : ''}
+                            ${isSelected ? 'bg-gold/10 border-gold' : ''}
+                          `}
+                          onClick={() => setSelectedDate(day)}
+                        >
+                          <div className={`
+                            text-sm font-mono mb-1
+                            ${isDayToday ? 'text-gold font-bold' : isCurrentMonth ? 'text-text-primary' : 'text-text-muted'}
+                          `}>
+                            {format(day, 'd')}
+                          </div>
+                          
+                          <div className="space-y-1">
+                            {dayEvents.slice(0, 3).map((event) => (
+                              <div
+                                key={event.eventID}
+                                className={`
+                                  text-xs p-1 rounded border cursor-pointer
+                                  transition-all duration-200 hover:scale-105
+                                  ${getEventTypeColor(event.eventType)}
+                                `}
+                                title={`${event.eventName}\n${event.hostCompany || ''}\n${event.location || ''}\n${format(new Date(event.startDate), 'h:mm a')}`}
+                              >
+                                <div className="font-semibold truncate">
+                                  {event.eventName}
+                                </div>
+                                <div className="truncate opacity-80">
+                                  {event.hostCompany}
+                                </div>
+                              </div>
+                            ))}
+                            
+                            {dayEvents.length > 3 && (
+                              <div className="text-xs text-text-muted p-1">
+                                +{dayEvents.length - 3} more
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
-        {/* Legend */}
-        <Card variant="terminal">
-          <CardHeader>
-            <CardTitle className="text-gold text-sm">Event Types</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-4">
-              {[
-                'EARNINGS_CALL',
-                'INVESTOR_MEETING', 
-                'CONFERENCE',
-                'ROADSHOW',
-                'ANALYST_DAY',
-                'PRODUCT_LAUNCH',
-                'OTHER'
-              ].map((type) => (
-                <div key={type} className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded border ${getEventTypeColor(type)}`}></div>
-                  <span className="text-xs text-text-secondary font-mono">
-                    {type.replace('_', ' ')}
-                  </span>
+        {/* Selected Day Events */}
+        {selectedDate && (
+          <Card variant="terminal">
+            <CardHeader>
+              <CardTitle className="text-gold">
+                Events for {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {getEventsForDay(selectedDate).length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {getEventsForDay(selectedDate).map((event) => (
+                    <Card key={event.eventID} className="bg-surface-secondary border-border-default">
+                      <CardContent className="p-4">
+                        <div className={`
+                          inline-block px-2 py-1 rounded text-xs font-mono mb-2 border
+                          ${getEventTypeColor(event.eventType)}
+                        `}>
+                          {event.eventType.replace('_', ' ')}
+                        </div>
+                        <h4 className="font-semibold text-text-primary mb-1">{event.eventName}</h4>
+                        <p className="text-sm text-text-secondary mb-1">{event.hostCompany}</p>
+                        {event.location && (
+                          <p className="text-sm text-text-muted mb-1">{event.location}</p>
+                        )}
+                        <p className="text-sm text-gold font-mono">
+                          {format(new Date(event.startDate), 'h:mm a')}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              ) : (
+                <div className="text-center text-text-secondary py-8">
+                  No events scheduled for this day
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </Layout>
   );
 };
 
-export default Calendar;
+export default CalendarPage;

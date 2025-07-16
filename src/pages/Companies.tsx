@@ -3,8 +3,10 @@ import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building2, MapPin, ExternalLink } from 'lucide-react';
+import { Building2, MapPin, ExternalLink, Bell, BellOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 
 interface Company {
   companyID: string;
@@ -13,29 +15,100 @@ interface Company {
   createdAt: string | null;
 }
 
+interface Subscription {
+  subID: string;
+  userID: string;
+  status: string;
+}
+
 const Companies: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
   useEffect(() => {
-    const fetchCompanies = async () => {
+    const fetchData = async () => {
       try {
-        const { data, error } = await supabase
-          .from('user_companies')
-          .select('*')
-          .order('companyName');
+        const [companiesData, subscriptionsData] = await Promise.all([
+          supabase
+            .from('user_companies')
+            .select('*')
+            .order('companyName'),
+          user ? supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('userID', user.id)
+            .eq('status', 'ACTIVE') : { data: [], error: null }
+        ]);
 
-        if (error) throw error;
-        setCompanies(data || []);
+        if (companiesData.error) throw companiesData.error;
+        if (subscriptionsData.error) throw subscriptionsData.error;
+
+        setCompanies(companiesData.data || []);
+        setSubscriptions(subscriptionsData.data || []);
       } catch (error) {
-        console.error('Error fetching companies:', error);
+        console.error('Error fetching data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCompanies();
-  }, []);
+    fetchData();
+  }, [user]);
+
+  const isSubscribed = (companyID: string) => {
+    return subscriptions.some(sub => sub.userID === user?.id);
+  };
+
+  const handleSubscribe = async (companyID: string, companyName: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('subscriptions')
+        .insert({
+          userID: user.id,
+          status: 'ACTIVE',
+          subStart: new Date().toISOString(),
+          gicsSector: null,
+          gicsSubCategory: null
+        });
+
+      if (error) throw error;
+
+      setSubscriptions(prev => [...prev, {
+        subID: crypto.randomUUID(),
+        userID: user.id,
+        status: 'ACTIVE'
+      }]);
+
+      toast.success(`Subscribed to ${companyName}`);
+    } catch (error) {
+      console.error('Error subscribing:', error);
+      toast.error('Failed to subscribe');
+    }
+  };
+
+  const handleUnsubscribe = async (companyID: string, companyName: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('subscriptions')
+        .update({ status: 'INACTIVE' })
+        .eq('userID', user.id)
+        .eq('status', 'ACTIVE');
+
+      if (error) throw error;
+
+      setSubscriptions(prev => prev.filter(sub => sub.userID !== user.id));
+      toast.success(`Unsubscribed from ${companyName}`);
+    } catch (error) {
+      console.error('Error unsubscribing:', error);
+      toast.error('Failed to unsubscribe');
+    }
+  };
 
   if (loading) {
     return (
@@ -87,13 +160,37 @@ const Companies: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-4">
                     <Badge variant="secondary" className="bg-success/10 text-success border-success/20">
                       Active
                     </Badge>
                     <div className="text-xs text-text-muted">
                       {company.createdAt && new Date(company.createdAt).toLocaleDateString()}
                     </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    {isSubscribed(company.companyID) ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleUnsubscribe(company.companyID, company.companyName)}
+                        className="flex-1"
+                      >
+                        <BellOff className="mr-2 h-3 w-3" />
+                        Unsubscribe
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleSubscribe(company.companyID, company.companyName)}
+                        className="flex-1"
+                      >
+                        <Bell className="mr-2 h-3 w-3" />
+                        Subscribe
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
