@@ -49,6 +49,13 @@ const Dashboard: React.FC = () => {
 
   const canCreateEvents = profile?.role === 'IR_ADMIN';
 
+  const handleViewDetails = (event: any) => {
+    // Navigate to the event details page or open a modal
+    console.log('View event details:', event);
+    // For now, you could navigate to /events or open a detailed modal
+    window.location.href = '/events';
+  };
+
   return (
     <Layout currentPage="dashboard">
       <div className="p-8 space-y-8">
@@ -122,6 +129,7 @@ const Dashboard: React.FC = () => {
                       status: 'upcoming' as const,
                       rsvpStatus: 'pending' as const,
                     }} 
+                    onViewDetails={handleViewDetails}
                   />
                 ))}
               </div>
