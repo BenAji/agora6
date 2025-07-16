@@ -49,6 +49,15 @@ const CreateEventDialog: React.FC<CreateEventDialogProps> = ({
       return;
     }
 
+    if (endDate && startDate >= endDate) {
+      toast({
+        variant: "destructive",
+        title: "Error", 
+        description: "End date must be greater than start date",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -173,7 +182,13 @@ const CreateEventDialog: React.FC<CreateEventDialogProps> = ({
                   <Calendar
                     mode="single"
                     selected={startDate}
-                    onSelect={setStartDate}
+                    onSelect={(date) => {
+                      setStartDate(date);
+                      // Clear end date if it's before or equal to the new start date
+                      if (date && endDate && date >= endDate) {
+                        setEndDate(undefined);
+                      }
+                    }}
                     initialFocus
                     className={cn("p-3 pointer-events-auto")}
                   />
@@ -202,6 +217,7 @@ const CreateEventDialog: React.FC<CreateEventDialogProps> = ({
                     selected={endDate}
                     onSelect={setEndDate}
                     initialFocus
+                    disabled={(date) => startDate ? date <= startDate : false}
                     className={cn("p-3 pointer-events-auto")}
                   />
                 </PopoverContent>
