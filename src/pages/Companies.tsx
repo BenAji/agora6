@@ -3,8 +3,9 @@ import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building2, MapPin, ExternalLink, Bell, BellOff, TrendingUp } from 'lucide-react';
+import { Building2, MapPin, ExternalLink, Bell, BellOff, TrendingUp, CheckSquare, Square } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
@@ -28,6 +29,8 @@ const Companies: React.FC = () => {
   const [companies, setCompanies] = useState<GicsCompany[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
+  const [isSubscribing, setIsSubscribing] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -98,6 +101,61 @@ const Companies: React.FC = () => {
     }
   };
 
+  // Get unique sectors from companies
+  const uniqueSectors = Array.from(new Set(companies.map(company => company.gicsSector)));
+
+  const handleSectorToggle = (sector: string) => {
+    setSelectedSectors(prev => 
+      prev.includes(sector) 
+        ? prev.filter(s => s !== sector)
+        : [...prev, sector]
+    );
+  };
+
+  const handleBulkSubscribe = async () => {
+    if (!user || selectedSectors.length === 0) return;
+
+    setIsSubscribing(true);
+    try {
+      // Create subscriptions for each selected sector
+      const subscriptionPromises = selectedSectors.map(sector => 
+        supabase
+          .from('subscriptions')
+          .insert({
+            userID: user.id,
+            status: 'ACTIVE',
+            subStart: new Date().toISOString(),
+            gicsSector: sector,
+            gicsSubCategory: null
+          })
+      );
+
+      const results = await Promise.all(subscriptionPromises);
+      
+      // Check for errors
+      const errors = results.filter(result => result.error);
+      if (errors.length > 0) {
+        throw new Error(`Failed to subscribe to ${errors.length} sectors`);
+      }
+
+      // Update local state
+      const newSubscriptions = selectedSectors.map(sector => ({
+        subID: crypto.randomUUID(),
+        userID: user.id,
+        status: 'ACTIVE'
+      }));
+      setSubscriptions(prev => [...prev, ...newSubscriptions]);
+
+      toast.success(`Successfully subscribed to ${selectedSectors.length} sector(s)`);
+      setSelectedSectors([]);
+    } catch (error) {
+      console.error('Error bulk subscribing:', error);
+      toast.error('Failed to subscribe to sectors');
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
+
   const handleUnsubscribe = async (tickerSymbol: string, companyName: string) => {
     if (!user) return;
 
@@ -137,11 +195,53 @@ const Companies: React.FC = () => {
               <h1 className="text-3xl font-bold text-gold mb-2">GICS Companies</h1>
               <p className="text-text-secondary">Browse and subscribe to companies by sector and ticker symbol</p>
             </div>
-            <Button>
-              <Building2 className="mr-2 h-4 w-4" />
-              Add Company
-            </Button>
           </div>
+
+          {/* Sector Subscription Section */}
+          {uniqueSectors.length > 0 && (
+            <div className="bg-surface-secondary border border-border-default rounded-lg p-6 mb-8">
+              <h2 className="text-xl font-semibold text-text-primary mb-4">Subscribe to Sectors</h2>
+              <p className="text-text-secondary mb-4">Select multiple sectors to subscribe to all companies within those sectors</p>
+              
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+                {uniqueSectors.map((sector) => (
+                  <div key={sector} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={sector}
+                      checked={selectedSectors.includes(sector)}
+                      onCheckedChange={() => handleSectorToggle(sector)}
+                    />
+                    <label 
+                      htmlFor={sector} 
+                      className="text-sm text-text-primary cursor-pointer hover:text-gold transition-colors"
+                    >
+                      {sector}
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-4">
+                <Button 
+                  onClick={handleBulkSubscribe}
+                  disabled={selectedSectors.length === 0 || isSubscribing || !user}
+                  className="bg-gold hover:bg-gold-hover"
+                >
+                  <Bell className="mr-2 h-4 w-4" />
+                  {isSubscribing ? 'Subscribing...' : `Subscribe to ${selectedSectors.length} Sector(s)`}
+                </Button>
+                {selectedSectors.length > 0 && (
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => setSelectedSectors([])}
+                    className="text-text-secondary hover:text-text-primary"
+                  >
+                    Clear Selection
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {companies.map((company) => (
