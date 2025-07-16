@@ -170,6 +170,20 @@ const Events: React.FC = () => {
 
   const canCreateEvents = profile?.role === 'IR_ADMIN';
 
+  const getEventStatus = (startDate: string, endDate?: string): 'upcoming' | 'ongoing' | 'completed' => {
+    const now = new Date();
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : start;
+    
+    if (now < start) {
+      return 'upcoming';
+    } else if (now >= start && now <= end) {
+      return 'ongoing';
+    } else {
+      return 'completed';
+    }
+  };
+
   return (
     <Layout currentPage="events">
       <div className="p-8 space-y-6">
@@ -248,7 +262,7 @@ const Events: React.FC = () => {
                   }),
                   location: event.location || 'TBD',
                   attendees: 0,
-                  status: 'upcoming' as const,
+                  status: getEventStatus(event.startDate, event.endDate),
                   rsvpStatus: event.rsvpStatus?.toLowerCase() as 'accepted' | 'declined' | 'tentative' | 'pending' | undefined,
                   description: event.description,
                   startDate: event.startDate,
