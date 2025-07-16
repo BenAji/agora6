@@ -4,7 +4,7 @@ import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building2, MapPin, ExternalLink, Bell, BellOff, TrendingUp, CheckSquare, Square } from 'lucide-react';
+import { Building2, MapPin, ExternalLink, Bell, BellOff, TrendingUp, CheckSquare, Square, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,6 +33,8 @@ const Companies: React.FC = () => {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
+  const [selectedSubSectors, setSelectedSubSectors] = useState<string[]>([]);
+  const [expandedSectors, setExpandedSectors] = useState<string[]>([]);
   const [isSubscribing, setIsSubscribing] = useState(false);
   const { user } = useAuth();
 
@@ -86,7 +88,17 @@ const Companies: React.FC = () => {
     return subscriptions.some(sub => 
       sub.userID === user?.id && 
       sub.status === 'ACTIVE' &&
-      sub.gicsSector === sector
+      sub.gicsSector === sector &&
+      !sub.gicsSubCategory // Sector-level subscription only
+    );
+  };
+
+  const isSubscribedToSubSector = (sector: string, subSector: string) => {
+    return subscriptions.some(sub => 
+      sub.userID === user?.id && 
+      sub.status === 'ACTIVE' &&
+      sub.gicsSector === sector &&
+      sub.gicsSubCategory === subSector
     );
   };
 
@@ -133,7 +145,7 @@ const Companies: React.FC = () => {
   ).sort();
 
   const handleSectorToggle = (sector: string) => {
-    if (!sector || sector.trim() === '') return; // Ignore empty sectors
+    if (isSubscribedToSector(sector)) return; // Can't unselect already subscribed sectors
     
     setSelectedSectors(prev => 
       prev.includes(sector) 
@@ -142,26 +154,43 @@ const Companies: React.FC = () => {
     );
   };
 
+  const handleSubSectorToggle = (sector: string, subSector: string) => {
+    if (isSubscribedToSubSector(sector, subSector)) return; // Can't unselect already subscribed subsectors
+    
+    const key = `${sector}:${subSector}`;
+    setSelectedSubSectors(prev => 
+      prev.includes(key) 
+        ? prev.filter(s => s !== key)
+        : [...prev, key]
+    );
+  };
+
+  const toggleSectorExpansion = (sector: string) => {
+    setExpandedSectors(prev => 
+      prev.includes(sector) 
+        ? prev.filter(s => s !== sector)
+        : [...prev, sector]
+    );
+  };
+
+  // Get unique subsectors for a given sector
+  const getSectorSubSectors = (sector: string) => {
+    return [...new Set(companies
+      .filter(company => company.gicsSector === sector)
+      .map(company => company.gicsSubCategory)
+      .filter(Boolean)
+    )].sort();
+  };
+
   const handleBulkSubscribe = async () => {
-    if (!user || selectedSectors.length === 0) {
-      toast.error('Please select sectors to subscribe to');
-      return;
-    }
+    if (!user || (selectedSectors.length === 0 && selectedSubSectors.length === 0)) return;
 
-    setIsSubscribing(true);
     try {
-      console.log('Starting bulk subscription for sectors:', selectedSectors);
-      console.log('User ID:', user.id);
-      
-      // Get all companies in the selected sectors
-      const companiesToSubscribe = companies.filter(company => 
-        selectedSectors.includes(company.gicsSector)
-      );
-
-      console.log('Companies to subscribe to:', companiesToSubscribe.map(c => `${c.companyName} (${c.tickerSymbol})`));
+      setIsSubscribing(true);
+      console.log('Bulk subscribing to sectors:', selectedSectors, 'and subsectors:', selectedSubSectors);
 
       // Create sector-level subscriptions for selected sectors
-      const subscriptionPromises = selectedSectors.map(async (sector) => {
+      const sectorPromises = selectedSectors.map(async (sector) => {
         console.log('Creating subscription for sector:', sector);
         return await supabase
           .from('subscriptions')
@@ -173,16 +202,28 @@ const Companies: React.FC = () => {
           });
       });
 
-      const results = await Promise.all(subscriptionPromises);
+      // Create subsector-level subscriptions for selected subsectors
+      const subSectorPromises = selectedSubSectors.map(async (key) => {
+        const [sector, subSector] = key.split(':');
+        console.log('Creating subscription for subsector:', sector, subSector);
+        return await supabase
+          .from('subscriptions')
+          .insert({
+            userID: user.id,
+            status: 'ACTIVE',
+            subStart: new Date().toISOString(),
+            gicsSector: sector,
+            gicsSubCategory: subSector
+          });
+      });
+
+      const results = await Promise.all([...sectorPromises, ...subSectorPromises]);
       
       // Check for errors
       const errors = results.filter(result => result.error);
       if (errors.length > 0) {
         console.error('Subscription errors:', errors);
-        errors.forEach(error => {
-          console.error('Individual error:', error.error);
-        });
-        throw new Error(`Failed to subscribe to ${errors.length} companies: ${errors[0].error?.message || 'Unknown error'}`);
+        throw new Error(`Failed to create ${errors.length} subscription(s)`);
       }
 
       console.log('All subscriptions created successfully');
@@ -200,8 +241,10 @@ const Companies: React.FC = () => {
         setSubscriptions(updatedSubscriptions || []);
       }
 
-      toast.success(`Successfully subscribed to ${selectedSectors.length} sector(s)`);
+      const totalSubscriptions = selectedSectors.length + selectedSubSectors.length;
+      toast.success(`Successfully subscribed to ${totalSubscriptions} item(s)`);
       setSelectedSectors([]);
+      setSelectedSubSectors([]);
     } catch (error) {
       console.error('Error bulk subscribing:', error);
       toast.error(`Failed to subscribe: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -210,21 +253,34 @@ const Companies: React.FC = () => {
     }
   };
 
-  const handleUnsubscribe = async (gicsSector: string) => {
+  const handleUnsubscribe = async (gicsSector: string, gicsSubCategory?: string) => {
     if (!user) return;
 
     try {
-      const { error } = await supabase
+      let query = supabase
         .from('subscriptions')
         .update({ status: 'INACTIVE' })
         .eq('userID', user.id)
         .eq('gicsSector', gicsSector)
         .eq('status', 'ACTIVE');
 
+      if (gicsSubCategory) {
+        query = query.eq('gicsSubCategory', gicsSubCategory);
+      } else {
+        query = query.is('gicsSubCategory', null);
+      }
+
+      const { error } = await query;
+
       if (error) throw error;
 
-      setSubscriptions(prev => prev.filter(sub => !(sub.gicsSector === gicsSector && sub.status === 'ACTIVE')));
-      toast.success(`Unsubscribed from ${gicsSector} sector`);
+      setSubscriptions(prev => prev.filter(sub => 
+        !(sub.gicsSector === gicsSector && 
+          sub.status === 'ACTIVE' && 
+          (gicsSubCategory ? sub.gicsSubCategory === gicsSubCategory : !sub.gicsSubCategory))
+      ));
+      const itemType = gicsSubCategory ? `${gicsSector} - ${gicsSubCategory}` : gicsSector;
+      toast.success(`Unsubscribed from ${itemType}`);
     } catch (error) {
       console.error('Error unsubscribing:', error);
       toast.error('Failed to unsubscribe');
@@ -256,29 +312,106 @@ const Companies: React.FC = () => {
           {uniqueSectors.length > 0 && (
             <div className="bg-surface-secondary border border-border-default rounded-lg p-6 mb-8">
               <h2 className="text-xl font-semibold text-text-primary mb-4">Subscribe to Sectors</h2>
-              <p className="text-text-secondary mb-4">Select multiple sectors to subscribe to all companies within those sectors</p>
+               <p className="text-text-secondary mb-4">Select sectors for broad coverage, or expand them to choose specific subsectors for more granular subscriptions</p>
               
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+              <div className="space-y-4 mb-6">
                 {uniqueSectors.map((sector) => {
                   const isAlreadySubscribed = isSubscribedToSector(sector);
+                  const subSectors = getSectorSubSectors(sector);
+                  const isExpanded = expandedSectors.includes(sector);
+                  
                   return (
-                    <div key={sector} className="flex items-center space-x-2">
-                      <Checkbox 
-                        id={sector}
-                        checked={selectedSectors.includes(sector) || isAlreadySubscribed}
-                        disabled={isAlreadySubscribed}
-                        onCheckedChange={() => handleSectorToggle(sector)}
-                      />
-                      <label 
-                        htmlFor={sector} 
-                        className={`text-sm cursor-pointer transition-colors ${
-                          isAlreadySubscribed 
-                            ? 'text-success' 
-                            : 'text-text-primary hover:text-gold'
-                        }`}
-                      >
-                        {sector} {isAlreadySubscribed && '✓'}
-                      </label>
+                    <div key={sector} className="border border-border-default rounded-lg">
+                      {/* Sector Header */}
+                      <div className="flex items-center justify-between p-4 bg-surface-primary">
+                        <div className="flex items-center space-x-3 flex-1">
+                          <Checkbox 
+                            id={sector}
+                            checked={selectedSectors.includes(sector) || isAlreadySubscribed}
+                            disabled={isAlreadySubscribed}
+                            onCheckedChange={() => handleSectorToggle(sector)}
+                          />
+                          <label 
+                            htmlFor={sector} 
+                            className={`text-sm font-medium cursor-pointer transition-colors flex-1 ${
+                              isAlreadySubscribed 
+                                ? 'text-success' 
+                                : 'text-text-primary hover:text-gold'
+                            }`}
+                          >
+                            {sector} {isAlreadySubscribed && '✓'}
+                          </label>
+                          {isAlreadySubscribed && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleUnsubscribe(sector)}
+                              className="text-text-muted hover:text-destructive h-auto p-1"
+                            >
+                              <BellOff className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        
+                        {subSectors.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleSectorExpansion(sector)}
+                            className="ml-2 h-auto p-1"
+                          >
+                            {isExpanded ? 
+                              <ChevronUp className="h-4 w-4" /> : 
+                              <ChevronDown className="h-4 w-4" />
+                            }
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Subsectors */}
+                      {isExpanded && subSectors.length > 0 && (
+                        <div className="p-4 pt-0 bg-surface-secondary/50">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pl-6">
+                            {subSectors.map((subSector) => {
+                              const isAlreadySubscribedToSub = isSubscribedToSubSector(sector, subSector);
+                              const key = `${sector}:${subSector}`;
+                              
+                              return (
+                                <div key={subSector} className="flex items-center justify-between space-x-2">
+                                  <div className="flex items-center space-x-2 flex-1">
+                                    <Checkbox 
+                                      id={key}
+                                      checked={selectedSubSectors.includes(key) || isAlreadySubscribedToSub}
+                                      disabled={isAlreadySubscribedToSub}
+                                      onCheckedChange={() => handleSubSectorToggle(sector, subSector)}
+                                    />
+                                    <label 
+                                      htmlFor={key} 
+                                      className={`text-xs cursor-pointer transition-colors ${
+                                        isAlreadySubscribedToSub 
+                                          ? 'text-success' 
+                                          : 'text-text-secondary hover:text-text-primary'
+                                      }`}
+                                    >
+                                      {subSector} {isAlreadySubscribedToSub && '✓'}
+                                    </label>
+                                  </div>
+                                  {isAlreadySubscribedToSub && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleUnsubscribe(sector, subSector)}
+                                      className="text-text-muted hover:text-destructive h-auto p-1"
+                                    >
+                                      <BellOff className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -287,16 +420,19 @@ const Companies: React.FC = () => {
               <div className="flex items-center gap-4">
                 <Button 
                   onClick={handleBulkSubscribe}
-                  disabled={selectedSectors.length === 0 || isSubscribing || !user}
+                  disabled={(selectedSectors.length === 0 && selectedSubSectors.length === 0) || isSubscribing || !user}
                   className="bg-gold hover:bg-gold-hover"
                 >
                   <Bell className="mr-2 h-4 w-4" />
-                  {isSubscribing ? 'Subscribing...' : `Subscribe to ${selectedSectors.length} Sector(s)`}
+                  {isSubscribing ? 'Subscribing...' : `Subscribe to ${selectedSectors.length + selectedSubSectors.length} Item(s)`}
                 </Button>
-                {selectedSectors.length > 0 && (
+                {(selectedSectors.length > 0 || selectedSubSectors.length > 0) && (
                   <Button 
                     variant="ghost" 
-                    onClick={() => setSelectedSectors([])}
+                    onClick={() => {
+                      setSelectedSectors([]);
+                      setSelectedSubSectors([]);
+                    }}
                     className="text-text-secondary hover:text-text-primary"
                   >
                     Clear Selection
