@@ -42,6 +42,8 @@ const Companies: React.FC = () => {
           supabase
             .from('gics_companies')
             .select('*')
+            .neq('companyName', '') // Filter out empty companies
+            .neq('gicsSector', '') // Filter out empty sectors
             .order('companyName'),
           user ? supabase
             .from('subscriptions')
@@ -53,10 +55,16 @@ const Companies: React.FC = () => {
         if (companiesData.error) throw companiesData.error;
         if (subscriptionsData.error) throw subscriptionsData.error;
 
-        setCompanies(companiesData.data || []);
+        // Filter out companies with empty names or sectors
+        const validCompanies = (companiesData.data || []).filter(
+          company => company.companyName && company.gicsSector
+        );
+
+        setCompanies(validCompanies);
         setSubscriptions(subscriptionsData.data || []);
       } catch (error) {
         console.error('Error fetching data:', error);
+        toast.error('Failed to load data');
       } finally {
         setLoading(false);
       }
@@ -111,10 +119,18 @@ const Companies: React.FC = () => {
     }
   };
 
-  // Get unique sectors from companies
-  const uniqueSectors = Array.from(new Set(companies.map(company => company.gicsSector)));
+  // Get unique sectors from companies (filter out empty sectors)
+  const uniqueSectors = Array.from(
+    new Set(
+      companies
+        .map(company => company.gicsSector)
+        .filter(sector => sector && sector.trim() !== '')
+    )
+  ).sort();
 
   const handleSectorToggle = (sector: string) => {
+    if (!sector || sector.trim() === '') return; // Ignore empty sectors
+    
     setSelectedSectors(prev => 
       prev.includes(sector) 
         ? prev.filter(s => s !== sector)
@@ -123,13 +139,20 @@ const Companies: React.FC = () => {
   };
 
   const handleBulkSubscribe = async () => {
-    if (!user || selectedSectors.length === 0) return;
+    if (!user || selectedSectors.length === 0) {
+      toast.error('Please select sectors to subscribe to');
+      return;
+    }
 
     setIsSubscribing(true);
     try {
+      console.log('Starting bulk subscription for sectors:', selectedSectors);
+      console.log('User ID:', user.id);
+      
       // Create subscriptions for each selected sector
-      const subscriptionPromises = selectedSectors.map(sector => 
-        supabase
+      const subscriptionPromises = selectedSectors.map(async (sector) => {
+        console.log('Creating subscription for sector:', sector);
+        return await supabase
           .from('subscriptions')
           .insert({
             userID: user.id,
@@ -137,8 +160,8 @@ const Companies: React.FC = () => {
             subStart: new Date().toISOString(),
             gicsSector: sector,
             gicsSubCategory: null
-          })
-      );
+          });
+      });
 
       const results = await Promise.all(subscriptionPromises);
       
@@ -146,27 +169,32 @@ const Companies: React.FC = () => {
       const errors = results.filter(result => result.error);
       if (errors.length > 0) {
         console.error('Subscription errors:', errors);
-        throw new Error(`Failed to subscribe to ${errors.length} sectors`);
+        errors.forEach(error => {
+          console.error('Individual error:', error.error);
+        });
+        throw new Error(`Failed to subscribe to ${errors.length} sectors: ${errors[0].error?.message || 'Unknown error'}`);
       }
 
-      // Log successful subscriptions
-      console.log('Successfully created subscriptions for sectors:', selectedSectors);
+      console.log('All subscriptions created successfully');
 
-      // Update local state with the actual sector data
-      const newSubscriptions = selectedSectors.map(sector => ({
-        subID: crypto.randomUUID(),
-        userID: user.id,
-        status: 'ACTIVE',
-        gicsSector: sector,
-        gicsSubCategory: null
-      }));
-      setSubscriptions(prev => [...prev, ...newSubscriptions]);
+      // Refresh subscriptions data
+      const { data: updatedSubscriptions, error: fetchError } = await supabase
+        .from('subscriptions')
+        .select('subID, userID, status, gicsSector, gicsSubCategory')
+        .eq('userID', user.id)
+        .eq('status', 'ACTIVE');
+
+      if (fetchError) {
+        console.error('Error fetching updated subscriptions:', fetchError);
+      } else {
+        setSubscriptions(updatedSubscriptions || []);
+      }
 
       toast.success(`Successfully subscribed to ${selectedSectors.length} sector(s)`);
       setSelectedSectors([]);
     } catch (error) {
       console.error('Error bulk subscribing:', error);
-      toast.error('Failed to subscribe to sectors');
+      toast.error(`Failed to subscribe: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubscribing(false);
     }
