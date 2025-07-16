@@ -124,11 +124,18 @@ const CalendarPage: React.FC = () => {
       let filteredCompanies: Company[] = [];
       
       if (user && userSubscriptions.length > 0) {
-        // Get companies that match user's subscribed sectors
-        const subscribedSectors = userSubscriptions.map(sub => sub.gicsSector).filter(Boolean);
-        filteredCompanies = allCompanies.filter(company => 
-          subscribedSectors.includes(company.gicsSector)
-        );
+        // Get companies that match user's subscribed sectors/subsectors
+        filteredCompanies = allCompanies.filter(company => {
+          return userSubscriptions.some(sub => 
+            sub.gicsSector === company.gicsSector &&
+            (
+              // Either subscribed to the entire sector (no gicsSubCategory)
+              !sub.gicsSubCategory ||
+              // Or subscribed to the specific subsector that matches the company
+              sub.gicsSubCategory === company.gicsSubCategory
+            )
+          );
+        });
         
         // Additionally, get companies from events where user has RSVP'd
         const userRSVPPromise = supabase
@@ -152,9 +159,6 @@ const CalendarPage: React.FC = () => {
           
           filteredCompanies = [...filteredCompanies, ...rsvpCompanies];
         }
-      } else {
-        // If no user or no subscriptions, show all companies
-        filteredCompanies = allCompanies;
       }
       
       setEvents(fetchedEvents);
