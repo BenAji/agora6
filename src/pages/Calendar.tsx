@@ -31,7 +31,7 @@ const CalendarPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isWeekView, setIsWeekView] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
 
   // Check if user can access calendar (Investment Analysts and Analyst Managers only)
   const canAccessCalendar = profile?.role === 'INVESTMENT_ANALYST' || profile?.role === 'ANALYST_MANAGER';
@@ -53,9 +53,15 @@ const CalendarPage: React.FC = () => {
       const [eventsResponse, companiesResponse] = await Promise.all([
         supabase
           .from('events')
-          .select('*, user_companies(companyName)')
+          .select(`
+            *, 
+            user_companies(companyName),
+            rsvps!inner(status, userID)
+          `)
           .gte('startDate', monthStart.toISOString())
           .lte('startDate', monthEnd.toISOString())
+          .eq('rsvps.userID', user?.id)
+          .eq('rsvps.status', 'ACCEPTED')
           .order('startDate'),
         supabase
           .from('user_companies')

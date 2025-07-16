@@ -4,7 +4,9 @@ import EventCard from '@/components/EventCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Search, Filter, Plus, TrendingUp } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Search, Filter, Plus, TrendingUp, Calendar, Clock, MapPin, Building2, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import CreateEventDialog from '@/components/CreateEventDialog';
@@ -18,6 +20,7 @@ interface Event {
   endDate: string;
   location: string;
   description: string;
+  rsvpStatus?: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'PENDING';
 }
 
 const Events: React.FC = () => {
@@ -25,7 +28,9 @@ const Events: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [createEventOpen, setCreateEventOpen] = useState(false);
-  const { profile } = useAuth();
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
+  const { profile, user } = useAuth();
 
   useEffect(() => {
     fetchEvents();
@@ -33,13 +38,35 @@ const Events: React.FC = () => {
 
   const fetchEvents = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('events')
         .select('*')
         .order('startDate', { ascending: true });
 
       if (error) throw error;
-      setEvents(data || []);
+      
+      // Fetch RSVP status for each event if user is logged in
+      if (user && data) {
+        const eventsWithRSVP = await Promise.all(
+          data.map(async (event) => {
+            const { data: rsvp } = await supabase
+              .from('rsvps')
+              .select('status')
+              .eq('eventID', event.eventID)
+              .eq('userID', user.id)
+              .single();
+            
+            return {
+              ...event,
+              rsvpStatus: rsvp?.status || undefined
+            };
+          })
+        );
+        setEvents(eventsWithRSVP);
+      } else {
+        setEvents(data || []);
+      }
     } catch (error) {
       console.error('Error fetching events:', error);
     } finally {
@@ -52,6 +79,19 @@ const Events: React.FC = () => {
     event.hostCompany?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     event.eventType.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleViewDetails = (eventCard: any) => {
+    // Find the original event from our events array using the eventCard id
+    const originalEvent = events.find(e => e.eventID === eventCard.id);
+    if (originalEvent) {
+      setSelectedEvent(originalEvent);
+      setViewDetailsOpen(true);
+    }
+  };
+
+  const handleRSVPUpdate = () => {
+    fetchEvents(); // Refresh events to get updated RSVP status
+  };
 
   const canCreateEvents = profile?.role === 'IR_ADMIN';
 
@@ -134,12 +174,82 @@ const Events: React.FC = () => {
                   location: event.location || 'TBD',
                   attendees: 0,
                   status: 'upcoming' as const,
-                  rsvpStatus: 'pending' as const,
-                }} 
+                  rsvpStatus: event.rsvpStatus?.toLowerCase() as 'accepted' | 'declined' | 'tentative' | 'pending' | undefined,
+                  description: event.description,
+                  startDate: event.startDate,
+                  endDate: event.endDate
+                }}
+                onViewDetails={handleViewDetails}
+                onRSVPUpdate={handleRSVPUpdate}
               />
             ))}
           </div>
         )}
+
+        {/* Event Details Modal */}
+        <Dialog open={viewDetailsOpen} onOpenChange={setViewDetailsOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-gold">{selectedEvent?.eventName}</DialogTitle>
+            </DialogHeader>
+            {selectedEvent && (
+              <div className="space-y-6">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="text-gold border-gold">
+                    {selectedEvent.eventType?.replace('_', ' ')}
+                  </Badge>
+                  {selectedEvent.rsvpStatus && (
+                    <Badge variant="outline" className="text-success border-success">
+                      RSVP: {selectedEvent.rsvpStatus}
+                    </Badge>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center text-sm">
+                      <Building2 className="mr-2 h-4 w-4 text-gold" />
+                      <span className="text-text-secondary">Company:</span>
+                      <span className="ml-2 text-text-primary">{selectedEvent.hostCompany}</span>
+                    </div>
+                    
+                    <div className="flex items-center text-sm">
+                      <Calendar className="mr-2 h-4 w-4 text-gold" />
+                      <span className="text-text-secondary">Date:</span>
+                      <span className="ml-2 text-text-primary">{new Date(selectedEvent.startDate).toLocaleDateString()}</span>
+                    </div>
+                    
+                    <div className="flex items-center text-sm">
+                      <Clock className="mr-2 h-4 w-4 text-gold" />
+                      <span className="text-text-secondary">Time:</span>
+                      <span className="ml-2 text-text-primary">{new Date(selectedEvent.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center text-sm">
+                      <MapPin className="mr-2 h-4 w-4 text-gold" />
+                      <span className="text-text-secondary">Location:</span>
+                      <span className="ml-2 text-text-primary">{selectedEvent.location}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {selectedEvent.description && (
+                  <div className="space-y-2">
+                    <div className="flex items-center text-sm font-medium text-text-primary">
+                      <FileText className="mr-2 h-4 w-4 text-gold" />
+                      Description
+                    </div>
+                    <p className="text-sm text-text-secondary leading-relaxed pl-6">
+                      {selectedEvent.description}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {canCreateEvents && (
           <CreateEventDialog 

@@ -2,6 +2,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, Clock, MapPin, Users, Building2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
+import { useState } from 'react';
 
 interface EventCardProps {
   event: {
@@ -15,10 +19,18 @@ interface EventCardProps {
     attendees: number;
     status: 'upcoming' | 'ongoing' | 'completed';
     rsvpStatus?: 'accepted' | 'declined' | 'tentative' | 'pending';
+    description?: string;
+    startDate?: string;
+    endDate?: string;
   };
+  onViewDetails?: (event: any) => void;
+  onRSVPUpdate?: () => void;
 }
 
-const EventCard = ({ event }: EventCardProps) => {
+const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [isRSVPing, setIsRSVPing] = useState(false);
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'upcoming': return 'bg-chart-quaternary';
@@ -34,6 +46,86 @@ const EventCard = ({ event }: EventCardProps) => {
       case 'declined': return 'bg-error';
       case 'tentative': return 'bg-warning';
       default: return 'bg-border-default';
+    }
+  };
+
+  const handleRSVP = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to RSVP to events",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsRSVPing(true);
+    try {
+      // Check if user already has an RSVP for this event
+      const { data: existingRSVP, error: fetchError } = await supabase
+        .from('rsvps')
+        .select('*')
+        .eq('eventID', event.id)
+        .eq('userID', user.id)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      let newStatus: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'PENDING' = 'ACCEPTED';
+      
+      if (existingRSVP) {
+        // Update existing RSVP - cycle through statuses
+        const statusCycle: ('ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'PENDING')[] = ['ACCEPTED', 'DECLINED', 'TENTATIVE', 'PENDING'];
+        const currentIndex = statusCycle.indexOf(existingRSVP.status);
+        newStatus = statusCycle[(currentIndex + 1) % statusCycle.length];
+        
+        const { error: updateError } = await supabase
+          .from('rsvps')
+          .update({ 
+            status: newStatus,
+            updatedAt: new Date().toISOString()
+          })
+          .eq('rsvpID', existingRSVP.rsvpID);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new RSVP
+        const { error: insertError } = await supabase
+          .from('rsvps')
+          .insert([{
+            eventID: event.id,
+            userID: user.id,
+            status: newStatus
+          }]);
+
+        if (insertError) throw insertError;
+      }
+
+      toast({
+        title: "RSVP Updated",
+        description: `Your RSVP status has been set to ${newStatus.toLowerCase()}`,
+      });
+
+      if (onRSVPUpdate) {
+        onRSVPUpdate();
+      }
+    } catch (error) {
+      console.error('Error updating RSVP:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update RSVP. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRSVPing(false);
+    }
+  };
+
+  const handleViewDetails = () => {
+    if (onViewDetails) {
+      onViewDetails(event);
     }
   };
 
@@ -87,11 +179,22 @@ const EventCard = ({ event }: EventCardProps) => {
         </div>
         
         <div className="mt-6 flex gap-2">
-          <Button size="sm" variant="outline" className="flex-1">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="flex-1"
+            onClick={handleViewDetails}
+          >
             View Details
           </Button>
-          <Button size="sm" variant="default" className="flex-1">
-            RSVP
+          <Button 
+            size="sm" 
+            variant="default" 
+            className="flex-1"
+            onClick={handleRSVP}
+            disabled={isRSVPing}
+          >
+            {isRSVPing ? 'Updating...' : 'RSVP'}
           </Button>
         </div>
       </CardContent>
