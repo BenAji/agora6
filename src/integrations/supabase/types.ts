@@ -227,15 +227,7 @@ export type Database = {
           updatedAt?: string | null
           userID?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "subscriptions_userID_fkey"
-            columns: ["userID"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["userID"]
-          },
-        ]
+        Relationships: []
       }
       user_companies: {
         Row: {
