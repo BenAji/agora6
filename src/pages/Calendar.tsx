@@ -3,7 +3,7 @@ import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameDay, isSameMonth, isToday, addWeeks, subWeeks, getISOWeek } from 'date-fns';
@@ -30,6 +30,7 @@ const CalendarPage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [loading, setLoading] = useState(true);
   const [isWeekView, setIsWeekView] = useState(false);
+  const [showLegend, setShowLegend] = useState(false);
   const { profile } = useAuth();
 
   // Check if user can access calendar (Investment Analysts and Analyst Managers only)
@@ -197,6 +198,15 @@ const CalendarPage: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-1">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-gold hover:bg-surface-secondary text-xs h-6 px-2"
+              onClick={() => setShowLegend(!showLegend)}
+            >
+              {showLegend ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
+              Legend
+            </Button>
             <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
               <Filter className="h-3 w-3 mr-1" />
               Filter
@@ -207,6 +217,34 @@ const CalendarPage: React.FC = () => {
             </Button>
           </div>
         </div>
+
+        {/* Event Type Legend */}
+        {showLegend && (
+          <Card variant="terminal" className="mb-2">
+            <CardContent className="p-3">
+              <div className="flex flex-wrap gap-2">
+                <div className="text-xs font-bold text-gold mb-1 w-full">Event Types:</div>
+                {[
+                  { type: 'EARNINGS_CALL', label: 'Earnings Call' },
+                  { type: 'INVESTOR_MEETING', label: 'Investor Meeting' },
+                  { type: 'CONFERENCE', label: 'Conference' },
+                  { type: 'ROADSHOW', label: 'Roadshow' },
+                  { type: 'ANALYST_DAY', label: 'Analyst Day' },
+                  { type: 'PRODUCT_LAUNCH', label: 'Product Launch' },
+                  { type: 'OTHER', label: 'Other' }
+                ].map(({ type, label }) => (
+                  <div key={type} className="flex items-center gap-1">
+                    <div className={`
+                      w-3 h-3 rounded border text-xs
+                      ${getEventTypeColor(type)}
+                    `}></div>
+                    <span className="text-xs text-text-secondary">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Main Calendar Grid */}
         <Card variant="terminal">
