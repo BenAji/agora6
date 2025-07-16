@@ -17,7 +17,6 @@ const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
     { id: 'events', label: 'Events', icon: Calendar, path: '/events' },
     { id: 'calendar', label: 'Calendar', icon: Calendar, path: '/calendar' },
     { id: 'companies', label: 'Companies', icon: Building2, path: '/companies' },
-    { id: 'users', label: 'Users', icon: Users, path: '/users' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
   ];
 
