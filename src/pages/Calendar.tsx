@@ -3,7 +3,9 @@ import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight, Eye, EyeOff } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight, Eye, EyeOff, ArrowUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameDay, isSameMonth, isToday, addWeeks, subWeeks, getISOWeek } from 'date-fns';
@@ -16,11 +18,14 @@ interface Event {
   startDate: string;
   location: string;
   companyID: string;
+  gicsSector?: string;
+  tickerSymbol?: string;
 }
 
 interface Company {
   companyID: string;
   companyName: string;
+  tickerSymbol?: string;
 }
 
 const CalendarPage: React.FC = () => {
@@ -32,6 +37,11 @@ const CalendarPage: React.FC = () => {
   const [isWeekView, setIsWeekView] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const [showOnlyRSVP, setShowOnlyRSVP] = useState(true);
+  const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
+  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
+  const [selectedGicsSectors, setSelectedGicsSectors] = useState<string[]>([]);
+  const [sortCompaniesAsc, setSortCompaniesAsc] = useState(true);
+  const [selectedCompanyForMonth, setSelectedCompanyForMonth] = useState<string | null>(null);
   const { profile, user } = useAuth();
 
   // Check if user can access calendar (Investment Analysts and Analyst Managers only)
@@ -104,7 +114,7 @@ const CalendarPage: React.FC = () => {
   };
 
   const getEventsForDay = (day: Date) => {
-    return events.filter(event => isSameDay(new Date(event.startDate), day));
+    return filteredEvents.filter(event => isSameDay(new Date(event.startDate), day));
   };
 
   const getWeeksInMonth = () => {
@@ -155,6 +165,44 @@ const CalendarPage: React.FC = () => {
       'OTHER': 'bg-text-muted/20 text-text-muted border-text-muted/30',
     };
     return colors[eventType as keyof typeof colors] || colors.OTHER;
+  };
+
+  // Filter helper functions
+  const uniqueEventTypes = [...new Set(events.map(event => event.eventType))];
+  const uniqueCompanies = [...new Set(events.map(event => event.hostCompany).filter(Boolean))];
+  const uniqueGicsSectors = [...new Set(events.map(event => event.gicsSector).filter(Boolean))];
+
+  const getFilteredEvents = () => {
+    return events.filter(event => {
+      if (selectedEventTypes.length > 0 && !selectedEventTypes.includes(event.eventType)) return false;
+      if (selectedCompanies.length > 0 && !selectedCompanies.includes(event.hostCompany)) return false;
+      if (selectedGicsSectors.length > 0 && !selectedGicsSectors.includes(event.gicsSector || '')) return false;
+      if (selectedCompanyForMonth && event.hostCompany !== selectedCompanyForMonth) return false;
+      return true;
+    });
+  };
+
+  const filteredEvents = getFilteredEvents();
+
+  const getSortedCompanies = () => {
+    const sorted = [...companies].sort((a, b) => {
+      const comparison = a.companyName.localeCompare(b.companyName);
+      return sortCompaniesAsc ? comparison : -comparison;
+    });
+    return sorted;
+  };
+
+  const clearAllFilters = () => {
+    setSelectedEventTypes([]);
+    setSelectedCompanies([]);
+    setSelectedGicsSectors([]);
+    setSelectedCompanyForMonth(null);
+  };
+
+  const activeFiltersCount = selectedEventTypes.length + selectedCompanies.length + selectedGicsSectors.length + (selectedCompanyForMonth ? 1 : 0);
+
+  const handleCompanyClick = (companyName: string) => {
+    setSelectedCompanyForMonth(selectedCompanyForMonth === companyName ? null : companyName);
   };
 
   if (!canAccessCalendar) {
@@ -241,10 +289,106 @@ const CalendarPage: React.FC = () => {
               {showLegend ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
               Event Category
             </Button>
-            <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
-              <Filter className="h-3 w-3 mr-1" />
-              Filter
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2 relative">
+                  <Filter className="h-3 w-3 mr-1" />
+                  Filter
+                  {activeFiltersCount > 0 && (
+                    <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 text-xs bg-gold text-gold-foreground">
+                      {activeFiltersCount}
+                    </Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4 bg-popover border-border-default" align="end">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-popover-foreground">Filter Events</h4>
+                    {activeFiltersCount > 0 && (
+                      <Button variant="outline" size="sm" onClick={clearAllFilters}>
+                        Clear All
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Event Types Filter */}
+                  <div>
+                    <label className="text-sm font-medium text-popover-foreground mb-2 block">Event Types</label>
+                    <div className="space-y-2">
+                      {uniqueEventTypes.map(type => (
+                        <div key={type} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`eventType-${type}`}
+                            checked={selectedEventTypes.includes(type)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedEventTypes([...selectedEventTypes, type]);
+                              } else {
+                                setSelectedEventTypes(selectedEventTypes.filter(t => t !== type));
+                              }
+                            }}
+                          />
+                          <label htmlFor={`eventType-${type}`} className="text-sm text-popover-foreground cursor-pointer">
+                            {type.replace('_', ' ')}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Companies Filter */}
+                  <div>
+                    <label className="text-sm font-medium text-popover-foreground mb-2 block">Companies</label>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {uniqueCompanies.map(company => (
+                        <div key={company} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`company-${company}`}
+                            checked={selectedCompanies.includes(company)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedCompanies([...selectedCompanies, company]);
+                              } else {
+                                setSelectedCompanies(selectedCompanies.filter(c => c !== company));
+                              }
+                            }}
+                          />
+                          <label htmlFor={`company-${company}`} className="text-sm text-popover-foreground cursor-pointer">
+                            {company}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* GICS Sectors Filter */}
+                  <div>
+                    <label className="text-sm font-medium text-popover-foreground mb-2 block">GICS Sectors</label>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {uniqueGicsSectors.map(sector => (
+                        <div key={sector} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`gics-${sector}`}
+                            checked={selectedGicsSectors.includes(sector)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedGicsSectors([...selectedGicsSectors, sector]);
+                              } else {
+                                setSelectedGicsSectors(selectedGicsSectors.filter(s => s !== sector));
+                              }
+                            }}
+                          />
+                          <label htmlFor={`gics-${sector}`} className="text-sm text-popover-foreground cursor-pointer">
+                            {sector}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
               <Download className="h-3 w-3 mr-1" />
               Export
@@ -302,8 +446,9 @@ const CalendarPage: React.FC = () => {
                 <div className="min-w-[800px]">
                   {/* Header Row */}
                   <div className="grid border-b border-border-default" style={{ gridTemplateColumns: '120px repeat(auto-fit, minmax(100px, 1fr))' }}>
-                    <div className="p-1 font-bold text-gold border-r border-border-default bg-surface-secondary text-xs">
-                      Company
+                    <div className="p-1 font-bold text-gold border-r border-border-default bg-surface-secondary text-xs flex items-center justify-between cursor-pointer hover:bg-surface-secondary/80" onClick={() => setSortCompaniesAsc(!sortCompaniesAsc)}>
+                      <span>Company</span>
+                      <ArrowUpDown className="h-3 w-3" />
                     </div>
                     {getWeeksInMonth().map((week, weekIndex) => (
                       <div key={weekIndex} className="grid grid-cols-5 border-r border-border-default">
@@ -323,11 +468,14 @@ const CalendarPage: React.FC = () => {
                   </div>
 
                   {/* Company Rows */}
-                  {companies.map((company) => (
-                    <div key={company.companyID} className="grid border-b border-border-default hover:bg-surface-secondary/30" style={{ gridTemplateColumns: '120px repeat(auto-fit, minmax(100px, 1fr))' }}>
-                      <div className="p-1 border-r border-border-default font-medium text-text-primary bg-surface-primary">
-                        <div className="truncate text-xs pr-1" title={company.companyName}>
-                          {company.companyName}
+                  {getSortedCompanies().map((company) => (
+                    <div key={company.companyID} className={`grid border-b border-border-default hover:bg-surface-secondary/30 ${selectedCompanyForMonth === company.companyName ? 'bg-gold/10' : ''}`} style={{ gridTemplateColumns: '120px repeat(auto-fit, minmax(100px, 1fr))' }}>
+                      <div className="p-1 border-r border-border-default font-medium text-text-primary bg-surface-primary cursor-pointer hover:bg-surface-secondary/50" onClick={() => handleCompanyClick(company.companyName)}>
+                        <div className="truncate text-xs pr-1" title={`${company.companyName}${company.tickerSymbol ? ` (${company.tickerSymbol})` : ''}`}>
+                          <div>{company.companyName}</div>
+                          {company.tickerSymbol && (
+                            <div className="text-xs text-text-muted font-mono">{company.tickerSymbol}</div>
+                          )}
                         </div>
                       </div>
                       
