@@ -1,61 +1,11 @@
-import { useState } from 'react';
-import Layout from '@/components/Layout';
-import AuthForm from '@/components/AuthForm';
-import DashboardStats from '@/components/DashboardStats';
-import EventCard from '@/components/EventCard';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Search, Filter, Plus, Calendar as CalendarIcon, TrendingUp } from 'lucide-react';
 import terminalBg from '@/assets/terminal-bg.jpg';
 import heroTerminal from '@/assets/hero-terminal.jpg';
 
-const Index = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'events'>('landing');
-
-  // Mock event data
-  const mockEvents = [
-    {
-      id: '1',
-      title: 'Q3 Earnings Call',
-      type: 'Earnings Call',
-      company: 'Apple Inc.',
-      date: 'Dec 18, 2024',
-      time: '09:00 EST',
-      location: 'Virtual Event',
-      attendees: 245,
-      status: 'upcoming' as const,
-      rsvpStatus: 'accepted' as const,
-    },
-    {
-      id: '2',
-      title: 'Annual Investor Day',
-      type: 'Investor Meeting',
-      company: 'Microsoft Corp.',
-      date: 'Dec 20, 2024',
-      time: '14:00 EST',
-      location: 'Redmond Campus',
-      attendees: 180,
-      status: 'upcoming' as const,
-      rsvpStatus: 'pending' as const,
-    },
-    {
-      id: '3',
-      title: 'Product Launch Event',
-      type: 'Product Launch',
-      company: 'Tesla Inc.',
-      date: 'Dec 22, 2024',
-      time: '18:00 PST',
-      location: 'Austin Gigafactory',
-      attendees: 320,
-      status: 'upcoming' as const,
-      rsvpStatus: 'tentative' as const,
-    },
-  ];
-
-  if (!isAuthenticated && currentView === 'landing') {
+const Index: React.FC = () => {
+  const navigate = useNavigate();
     return (
       <div 
         className="min-h-screen bg-background relative"
@@ -81,10 +31,10 @@ const Index = () => {
                 </div>
               </div>
               <div className="flex gap-3">
-                <Button variant="terminal" onClick={() => setCurrentView('dashboard')}>
+                <Button variant="terminal" onClick={() => navigate('/dashboard')}>
                   View Demo
                 </Button>
-                <Button onClick={() => setIsAuthenticated(true)}>
+                <Button onClick={() => navigate('/auth')}>
                   Get Started
                 </Button>
               </div>
@@ -123,10 +73,10 @@ const Index = () => {
                 </div>
                 
                 <div className="flex gap-4">
-                  <Button size="lg" onClick={() => setIsAuthenticated(true)}>
+                  <Button size="lg" onClick={() => navigate('/auth')}>
                     Start Free Trial
                   </Button>
-                  <Button variant="terminal" size="lg" onClick={() => setCurrentView('events')}>
+                  <Button variant="terminal" size="lg" onClick={() => navigate('/events')}>
                     View Events
                   </Button>
                 </div>
@@ -145,119 +95,6 @@ const Index = () => {
         </div>
       </div>
     );
-  }
-
-  if (isAuthenticated && currentView === 'landing') {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <AuthForm mode={authMode} onModeChange={setAuthMode} />
-      </div>
-    );
-  }
-
-  if (currentView === 'dashboard') {
-    return (
-      <Layout currentPage="dashboard">
-        <div className="p-8 space-y-8">
-          {/* Dashboard Header */}
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-3xl font-bold text-gold mb-2">Dashboard</h1>
-              <p className="text-text-secondary">
-                Real-time insights and analytics for your IR events
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Button variant="terminal">
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                Calendar View
-              </Button>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New Event
-              </Button>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <DashboardStats />
-
-          {/* Recent Events */}
-          <Card variant="terminal">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-gold">Recent Events</CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => setCurrentView('events')}>
-                  View All Events
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {mockEvents.map((event) => (
-                  <EventCard key={event.id} event={event} />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (currentView === 'events') {
-    return (
-      <Layout currentPage="events">
-        <div className="p-8 space-y-6">
-          {/* Events Header */}
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-3xl font-bold text-gold mb-2">Events</h1>
-              <p className="text-text-secondary">
-                Manage and track all investor relations events
-              </p>
-            </div>
-            <Button onClick={() => setCurrentView('dashboard')}>
-              <TrendingUp className="mr-2 h-4 w-4" />
-              Dashboard
-            </Button>
-          </div>
-
-          {/* Search and Filters */}
-          <Card variant="terminal">
-            <CardContent className="p-6">
-              <div className="flex gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-text-muted" />
-                  <Input 
-                    placeholder="Search events, companies, or types..." 
-                    className="pl-10"
-                  />
-                </div>
-                <Button variant="terminal">
-                  <Filter className="mr-2 h-4 w-4" />
-                  Filters
-                </Button>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Event
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Events Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {mockEvents.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  return null;
 };
 
 export default Index;
