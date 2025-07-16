@@ -28,10 +28,19 @@ interface Company {
   companyName: string;
 }
 
+interface Subscription {
+  subID: string;
+  userID: string;
+  status: string;
+  gicsSector?: string;
+  gicsSubCategory?: string;
+}
+
 const CalendarPage: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [events, setEvents] = useState<Event[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventDetailsOpen, setEventDetailsOpen] = useState(false);
@@ -84,19 +93,73 @@ const CalendarPage: React.FC = () => {
           .order('startDate');
       }
 
-      const [eventsResponse, companiesResponse] = await Promise.all([
+      // Fetch subscriptions if user is logged in
+      const subscriptionsPromise = user ? supabase
+        .from('subscriptions')
+        .select('subID, userID, status, gicsSector, gicsSubCategory')
+        .eq('userID', user.id)
+        .eq('status', 'ACTIVE') : Promise.resolve({ data: [], error: null });
+
+      // Get companies from GICS database for all companies
+      const allCompaniesPromise = supabase
+        .from('gics_companies')
+        .select('companyID, companyName, gicsSector, gicsSubCategory')
+        .order('companyName');
+
+      const [eventsResponse, subscriptionsResponse, allCompaniesResponse] = await Promise.all([
         eventsQuery,
-        supabase
-          .from('user_companies')
-          .select('*')
-          .order('companyName')
+        subscriptionsPromise,
+        allCompaniesPromise
       ]);
 
       if (eventsResponse.error) throw eventsResponse.error;
-      if (companiesResponse.error) throw companiesResponse.error;
+      if (subscriptionsResponse.error) throw subscriptionsResponse.error;
+      if (allCompaniesResponse.error) throw allCompaniesResponse.error;
       
-      setEvents(eventsResponse.data || []);
-      setCompanies(companiesResponse.data || []);
+      const fetchedEvents = eventsResponse.data || [];
+      const userSubscriptions = subscriptionsResponse.data || [];
+      const allCompanies = allCompaniesResponse.data || [];
+      
+      // Filter companies based on subscriptions
+      let filteredCompanies: Company[] = [];
+      
+      if (user && userSubscriptions.length > 0) {
+        // Get companies that match user's subscribed sectors
+        const subscribedSectors = userSubscriptions.map(sub => sub.gicsSector).filter(Boolean);
+        filteredCompanies = allCompanies.filter(company => 
+          subscribedSectors.includes(company.gicsSector)
+        );
+        
+        // Additionally, get companies from events where user has RSVP'd
+        const userRSVPPromise = supabase
+          .from('rsvps')
+          .select('eventID')
+          .eq('userID', user.id)
+          .eq('status', 'ACCEPTED');
+          
+        const { data: userRSVPs } = await userRSVPPromise;
+        
+        if (userRSVPs && userRSVPs.length > 0) {
+          const rsvpEventIds = userRSVPs.map(rsvp => rsvp.eventID);
+          const rsvpEvents = fetchedEvents.filter(event => rsvpEventIds.includes(event.eventID));
+          
+          // Get companies from these RSVP'd events
+          const rsvpCompanyIds = rsvpEvents.map(event => event.companyID).filter(Boolean);
+          const rsvpCompanies = allCompanies.filter(company => 
+            rsvpCompanyIds.includes(company.companyID) &&
+            !filteredCompanies.some(existing => existing.companyID === company.companyID)
+          );
+          
+          filteredCompanies = [...filteredCompanies, ...rsvpCompanies];
+        }
+      } else {
+        // If no user or no subscriptions, show all companies
+        filteredCompanies = allCompanies;
+      }
+      
+      setEvents(fetchedEvents);
+      setCompanies(filteredCompanies);
+      setSubscriptions(userSubscriptions);
     } catch (error) {
       console.error('Error fetching calendar data:', error);
     } finally {
