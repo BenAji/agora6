@@ -3,9 +3,12 @@ import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight, Eye, EyeOff } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight, Eye, EyeOff, Clock, MapPin, Building2, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameDay, isSameMonth, isToday, addWeeks, subWeeks, getISOWeek } from 'date-fns';
 
 interface Event {
@@ -14,7 +17,9 @@ interface Event {
   eventType: string;
   hostCompany: string;
   startDate: string;
+  endDate?: string;
   location: string;
+  description?: string;
   companyID: string;
 }
 
@@ -28,11 +33,15 @@ const CalendarPage: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [eventDetailsOpen, setEventDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isWeekView, setIsWeekView] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const [showOnlyRSVP, setShowOnlyRSVP] = useState(true);
+  const [isRSVPing, setIsRSVPing] = useState(false);
   const { profile, user } = useAuth();
+  const { toast } = useToast();
 
   // Check if user can access calendar (Investment Analysts and Analyst Managers only)
   const canAccessCalendar = profile?.role === 'INVESTMENT_ANALYST' || profile?.role === 'ANALYST_MANAGER';
@@ -155,6 +164,84 @@ const CalendarPage: React.FC = () => {
       'OTHER': 'bg-text-muted/20 text-text-muted border-text-muted/30',
     };
     return colors[eventType as keyof typeof colors] || colors.OTHER;
+  };
+
+  const handleEventClick = (event: Event) => {
+    setSelectedEvent(event);
+    setEventDetailsOpen(true);
+  };
+
+  const handleRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
+    if (!user || !selectedEvent) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to RSVP to events",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsRSVPing(true);
+    try {
+      // Check if user already has an RSVP for this event
+      const { data: existingRSVP, error: fetchError } = await supabase
+        .from('rsvps')
+        .select('*')
+        .eq('eventID', selectedEvent.eventID)
+        .eq('userID', user.id)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      if (existingRSVP) {
+        // Update existing RSVP
+        const { error: updateError } = await supabase
+          .from('rsvps')
+          .update({ 
+            status: status,
+            updatedAt: new Date().toISOString()
+          })
+          .eq('rsvpID', existingRSVP.rsvpID);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new RSVP
+        const { error: insertError } = await supabase
+          .from('rsvps')
+          .insert([{
+            eventID: selectedEvent.eventID,
+            userID: user.id,
+            status: status
+          }]);
+
+        if (insertError) throw insertError;
+      }
+
+      toast({
+        title: "RSVP Updated",
+        description: `Your RSVP status has been set to ${status.toLowerCase()}`,
+      });
+
+      // Refresh data to reflect changes
+      fetchData();
+    } catch (error) {
+      console.error('Error updating RSVP:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update RSVP. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRSVPing(false);
+    }
+  };
+
+  const isEventPast = (event: Event) => {
+    const eventDate = new Date(event.endDate || event.startDate);
+    const now = new Date();
+    return eventDate < now;
   };
 
   if (!canAccessCalendar) {
@@ -350,22 +437,32 @@ const CalendarPage: React.FC = () => {
                                 onClick={() => setSelectedDate(day)}
                               >
                                 {dayEvents.length > 0 && (
-                                  <div className="space-y-0.5">
+                                   <div className="space-y-0.5">
                                      {dayEvents.slice(0, 2).map((event) => (
                                        <Badge
                                          key={event.eventID}
                                          variant="secondary"
                                          className={`
-                                           text-xs p-0.5 w-full justify-start truncate
+                                           text-xs p-0.5 w-full justify-start truncate cursor-pointer hover:opacity-80 transition-opacity
                                            ${getEventTypeColor(event.eventType)}
                                          `}
                                          title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}${showOnlyRSVP ? ' (RSVP\'d)' : ''}`}
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           handleEventClick(event);
+                                         }}
                                        >
                                          {event.eventName.length > 8 ? event.eventName.substring(0, 8) + '...' : event.eventName}
                                        </Badge>
                                      ))}
                                      {dayEvents.length > 2 && (
-                                       <div className="text-xs text-text-muted text-center">
+                                       <div 
+                                         className="text-xs text-text-muted text-center cursor-pointer hover:text-gold transition-colors"
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           setSelectedDate(day);
+                                         }}
+                                       >
                                          +{dayEvents.length - 2}
                                       </div>
                                     )}
@@ -399,7 +496,11 @@ const CalendarPage: React.FC = () => {
               {getEventsForDay(selectedDate).length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {getEventsForDay(selectedDate).map((event) => (
-                    <Card key={event.eventID} className="bg-surface-secondary border-border-default">
+                    <Card 
+                      key={event.eventID} 
+                      className="bg-surface-secondary border-border-default cursor-pointer hover:bg-surface-secondary/80 transition-colors"
+                      onClick={() => handleEventClick(event)}
+                    >
                       <CardContent className="p-4">
                         <div className={`
                           inline-block px-2 py-1 rounded text-xs font-mono mb-2 border
@@ -427,6 +528,120 @@ const CalendarPage: React.FC = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Event Details Dialog */}
+        <Dialog open={eventDetailsOpen} onOpenChange={setEventDetailsOpen}>
+          <DialogContent className="max-w-2xl bg-surface-primary border border-border-default">
+            <DialogHeader>
+              <DialogTitle className="text-gold text-xl">
+                {selectedEvent?.eventName}
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedEvent && (
+              <div className="space-y-6">
+                <div className="flex gap-2">
+                  <Badge className={`${getEventTypeColor(selectedEvent.eventType)}`}>
+                    {selectedEvent.eventType.replace('_', ' ')}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center text-text-secondary">
+                    <Building2 className="mr-3 h-5 w-5 text-gold" />
+                    <div>
+                      <div className="text-sm font-medium">Company</div>
+                      <div>{selectedEvent.hostCompany || 'TBD'}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center text-text-secondary">
+                    <CalendarDays className="mr-3 h-5 w-5 text-gold" />
+                    <div>
+                      <div className="text-sm font-medium">Date & Time</div>
+                      <div>{format(new Date(selectedEvent.startDate), 'EEEE, MMMM d, yyyy')}</div>
+                      <div className="text-sm">{format(new Date(selectedEvent.startDate), 'h:mm a')}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center text-text-secondary">
+                    <MapPin className="mr-3 h-5 w-5 text-gold" />
+                    <div>
+                      <div className="text-sm font-medium">Location</div>
+                      <div>{selectedEvent.location || 'TBD'}</div>
+                    </div>
+                  </div>
+
+                  {selectedEvent.endDate && (
+                    <div className="flex items-center text-text-secondary">
+                      <Clock className="mr-3 h-5 w-5 text-gold" />
+                      <div>
+                        <div className="text-sm font-medium">End Date</div>
+                        <div>{format(new Date(selectedEvent.endDate), 'EEEE, MMMM d, yyyy')}</div>
+                        <div className="text-sm">{format(new Date(selectedEvent.endDate), 'h:mm a')}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {selectedEvent.description && (
+                  <div>
+                    <div className="text-sm font-medium text-text-secondary mb-2">Description</div>
+                    <div className="text-text-primary bg-surface-secondary p-4 rounded-lg border border-border-default">
+                      {selectedEvent.description}
+                    </div>
+                  </div>
+                )}
+
+                {/* RSVP Section */}
+                <div className="flex gap-2 pt-4 border-t border-border-default">
+                  {isEventPast(selectedEvent) ? (
+                    <Button 
+                      variant="secondary" 
+                      className="flex-1"
+                      disabled
+                    >
+                      Event Ended
+                    </Button>
+                  ) : (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="default" 
+                          className="flex-1"
+                          disabled={isRSVPing}
+                        >
+                          {isRSVPing ? 'Updating...' : 'RSVP'}
+                          <ChevronDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="center" className="bg-surface-primary border border-border-default z-50">
+                        <DropdownMenuItem 
+                          onClick={() => handleRSVP('ACCEPTED')}
+                          className="text-success hover:bg-surface-secondary"
+                        >
+                          Accept
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleRSVP('DECLINED')}
+                          className="text-error hover:bg-surface-secondary"
+                        >
+                          Decline
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleRSVP('TENTATIVE')}
+                          className="text-warning hover:bg-surface-secondary"
+                        >
+                          Tentative
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
