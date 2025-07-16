@@ -188,8 +188,8 @@ export type Database = {
             foreignKeyName: "rsvps_userID_fkey"
             columns: ["userID"]
             isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["userID"]
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
