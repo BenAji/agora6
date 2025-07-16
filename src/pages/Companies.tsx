@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +26,8 @@ interface Subscription {
   status: string;
   gicsSector?: string;
   gicsSubCategory?: string;
+  tickerSymbol?: string;
+  companyName?: string;
 }
 
 const Companies: React.FC = () => {
@@ -47,7 +50,7 @@ const Companies: React.FC = () => {
             .order('companyName'),
           user ? supabase
             .from('subscriptions')
-            .select('subID, userID, status, gicsSector, gicsSubCategory')
+            .select('subID, userID, status, gicsSector, gicsSubCategory, tickerSymbol, companyName')
             .eq('userID', user.id)
             .eq('status', 'ACTIVE') : { data: [], error: null }
         ]);
@@ -73,10 +76,11 @@ const Companies: React.FC = () => {
     fetchData();
   }, [user]);
 
-  const isSubscribed = (tickerSymbol: string) => {
+  const isSubscribedToCompany = (tickerSymbol: string) => {
     return subscriptions.some(sub => 
       sub.userID === user?.id && 
-      sub.status === 'ACTIVE'
+      sub.status === 'ACTIVE' &&
+      sub.tickerSymbol === tickerSymbol
     );
   };
 
@@ -84,7 +88,8 @@ const Companies: React.FC = () => {
     return subscriptions.some(sub => 
       sub.userID === user?.id && 
       sub.status === 'ACTIVE' &&
-      sub.gicsSector === sector
+      sub.gicsSector === sector &&
+      !sub.tickerSymbol // Sector-level subscription (not company-specific)
     );
   };
 
@@ -99,7 +104,9 @@ const Companies: React.FC = () => {
           status: 'ACTIVE',
           subStart: new Date().toISOString(),
           gicsSector: gicsSector,
-          gicsSubCategory: gicsSubCategory
+          gicsSubCategory: gicsSubCategory,
+          tickerSymbol: tickerSymbol,
+          companyName: companyName
         });
 
       if (error) throw error;
@@ -108,7 +115,11 @@ const Companies: React.FC = () => {
       const newSubscription = {
         subID: crypto.randomUUID(),
         userID: user.id,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        gicsSector: gicsSector,
+        gicsSubCategory: gicsSubCategory,
+        tickerSymbol: tickerSymbol,
+        companyName: companyName
       };
       setSubscriptions(prev => [...prev, newSubscription]);
 
@@ -149,17 +160,26 @@ const Companies: React.FC = () => {
       console.log('Starting bulk subscription for sectors:', selectedSectors);
       console.log('User ID:', user.id);
       
-      // Create subscriptions for each selected sector
-      const subscriptionPromises = selectedSectors.map(async (sector) => {
-        console.log('Creating subscription for sector:', sector);
+      // Get all companies in the selected sectors
+      const companiesToSubscribe = companies.filter(company => 
+        selectedSectors.includes(company.gicsSector)
+      );
+
+      console.log('Companies to subscribe to:', companiesToSubscribe.map(c => `${c.companyName} (${c.tickerSymbol})`));
+
+      // Create individual company subscriptions for each company in selected sectors
+      const subscriptionPromises = companiesToSubscribe.map(async (company) => {
+        console.log('Creating subscription for company:', company.companyName, 'in sector:', company.gicsSector);
         return await supabase
           .from('subscriptions')
           .insert({
             userID: user.id,
             status: 'ACTIVE',
             subStart: new Date().toISOString(),
-            gicsSector: sector,
-            gicsSubCategory: null
+            gicsSector: company.gicsSector,
+            gicsSubCategory: company.gicsSubCategory,
+            tickerSymbol: company.tickerSymbol,
+            companyName: company.companyName
           });
       });
 
@@ -172,7 +192,7 @@ const Companies: React.FC = () => {
         errors.forEach(error => {
           console.error('Individual error:', error.error);
         });
-        throw new Error(`Failed to subscribe to ${errors.length} sectors: ${errors[0].error?.message || 'Unknown error'}`);
+        throw new Error(`Failed to subscribe to ${errors.length} companies: ${errors[0].error?.message || 'Unknown error'}`);
       }
 
       console.log('All subscriptions created successfully');
@@ -180,7 +200,7 @@ const Companies: React.FC = () => {
       // Refresh subscriptions data
       const { data: updatedSubscriptions, error: fetchError } = await supabase
         .from('subscriptions')
-        .select('subID, userID, status, gicsSector, gicsSubCategory')
+        .select('subID, userID, status, gicsSector, gicsSubCategory, tickerSymbol, companyName')
         .eq('userID', user.id)
         .eq('status', 'ACTIVE');
 
@@ -190,7 +210,7 @@ const Companies: React.FC = () => {
         setSubscriptions(updatedSubscriptions || []);
       }
 
-      toast.success(`Successfully subscribed to ${selectedSectors.length} sector(s)`);
+      toast.success(`Successfully subscribed to ${companiesToSubscribe.length} companies in ${selectedSectors.length} sector(s)`);
       setSelectedSectors([]);
     } catch (error) {
       console.error('Error bulk subscribing:', error);
@@ -208,11 +228,12 @@ const Companies: React.FC = () => {
         .from('subscriptions')
         .update({ status: 'INACTIVE' })
         .eq('userID', user.id)
+        .eq('tickerSymbol', tickerSymbol)
         .eq('status', 'ACTIVE');
 
       if (error) throw error;
 
-      setSubscriptions(prev => prev.filter(sub => sub.status !== 'ACTIVE'));
+      setSubscriptions(prev => prev.filter(sub => !(sub.tickerSymbol === tickerSymbol && sub.status === 'ACTIVE')));
       toast.success(`Unsubscribed from ${companyName} (${tickerSymbol})`);
     } catch (error) {
       console.error('Error unsubscribing:', error);
@@ -334,7 +355,7 @@ const Companies: React.FC = () => {
                     </div>
                     
                     <div className="flex gap-2">
-                      {isSubscribed(company.tickerSymbol) ? (
+                      {isSubscribedToCompany(company.tickerSymbol) ? (
                         <Button
                           variant="outline"
                           size="sm"
