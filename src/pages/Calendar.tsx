@@ -31,16 +31,15 @@ const CalendarPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isWeekView, setIsWeekView] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
+  const [showOnlyRSVP, setShowOnlyRSVP] = useState(true);
   const { profile, user } = useAuth();
 
   // Check if user can access calendar (Investment Analysts and Analyst Managers only)
   const canAccessCalendar = profile?.role === 'INVESTMENT_ANALYST' || profile?.role === 'ANALYST_MANAGER';
 
   useEffect(() => {
-    if (canAccessCalendar) {
-      fetchData();
-    }
-  }, [canAccessCalendar, currentMonth]);
+    fetchData();
+  }, [currentMonth, isWeekView, showOnlyRSVP]);  // Added showOnlyRSVP dependency
 
   const fetchData = async () => {
     try {
@@ -50,8 +49,19 @@ const CalendarPage: React.FC = () => {
       const monthStart = startOfWeek(startOfMonth(currentMonth));
       const monthEnd = endOfWeek(endOfMonth(currentMonth));
 
-      const [eventsResponse, companiesResponse] = await Promise.all([
-        supabase
+      let eventsQuery = supabase
+        .from('events')
+        .select(`
+          *, 
+          user_companies(companyName)
+        `)
+        .gte('startDate', monthStart.toISOString())
+        .lte('startDate', monthEnd.toISOString())
+        .order('startDate');
+
+      // If showing only RSVP'd events and user is logged in, filter by RSVP status
+      if (showOnlyRSVP && user) {
+        eventsQuery = supabase
           .from('events')
           .select(`
             *, 
@@ -60,9 +70,13 @@ const CalendarPage: React.FC = () => {
           `)
           .gte('startDate', monthStart.toISOString())
           .lte('startDate', monthEnd.toISOString())
-          .eq('rsvps.userID', user?.id)
+          .eq('rsvps.userID', user.id)
           .eq('rsvps.status', 'ACCEPTED')
-          .order('startDate'),
+          .order('startDate');
+      }
+
+      const [eventsResponse, companiesResponse] = await Promise.all([
+        eventsQuery,
         supabase
           .from('user_companies')
           .select('*')
@@ -203,6 +217,18 @@ const CalendarPage: React.FC = () => {
             <span className="text-xs text-text-secondary">Week</span>
           </div>
 
+          {/* View Toggle - RSVP vs All Events */}
+          <div className="flex items-center space-x-1 mr-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setShowOnlyRSVP(!showOnlyRSVP)}
+              className={`text-xs h-6 px-2 ${showOnlyRSVP ? 'text-gold bg-gold/10' : 'text-text-secondary hover:bg-surface-secondary'}`}
+            >
+              {showOnlyRSVP ? '✓ My Events' : 'All Events'}
+            </Button>
+          </div>
+
           <div className="flex items-center space-x-1">
             <Button 
               variant="ghost" 
@@ -258,6 +284,17 @@ const CalendarPage: React.FC = () => {
               <div className="flex items-center justify-center h-60">
                 <div className="text-text-secondary text-sm">Loading calendar...</div>
               </div>
+            ) : events.length === 0 ? (
+              <div className="flex items-center justify-center h-60 flex-col space-y-2">
+                <div className="text-text-secondary text-sm">
+                  {showOnlyRSVP ? 'No RSVP\'d events for this period' : 'No events for this period'}
+                </div>
+                {showOnlyRSVP && (
+                  <div className="text-text-muted text-xs">
+                    Try switching to "All Events" or RSVP to events in the Events tab
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <div className="min-w-[800px]">
@@ -312,22 +349,22 @@ const CalendarPage: React.FC = () => {
                               >
                                 {dayEvents.length > 0 && (
                                   <div className="space-y-0.5">
-                                    {dayEvents.slice(0, 1).map((event) => (
-                                      <Badge
-                                        key={event.eventID}
-                                        variant="secondary"
-                                        className={`
-                                          text-xs p-0.5 w-full justify-start truncate
-                                          ${getEventTypeColor(event.eventType)}
-                                        `}
-                                        title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}`}
-                                      >
-                                        {event.eventType.split('_')[0]}
-                                      </Badge>
-                                    ))}
-                                    {dayEvents.length > 1 && (
-                                      <div className="text-xs text-text-muted text-center">
-                                        +{dayEvents.length - 1}
+                                     {dayEvents.slice(0, 2).map((event) => (
+                                       <Badge
+                                         key={event.eventID}
+                                         variant="secondary"
+                                         className={`
+                                           text-xs p-0.5 w-full justify-start truncate
+                                           ${getEventTypeColor(event.eventType)}
+                                         `}
+                                         title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}${showOnlyRSVP ? ' (RSVP\'d)' : ''}`}
+                                       >
+                                         {event.eventName.length > 8 ? event.eventName.substring(0, 8) + '...' : event.eventName}
+                                       </Badge>
+                                     ))}
+                                     {dayEvents.length > 2 && (
+                                       <div className="text-xs text-text-muted text-center">
+                                         +{dayEvents.length - 2}
                                       </div>
                                     )}
                                   </div>
@@ -351,6 +388,9 @@ const CalendarPage: React.FC = () => {
             <CardHeader>
               <CardTitle className="text-gold">
                 Events for {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+                {showOnlyRSVP && (
+                  <span className="text-sm text-text-muted ml-2">(RSVP'd Events Only)</span>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -379,7 +419,7 @@ const CalendarPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="text-center text-text-secondary py-8">
-                  No events scheduled for this day
+                  {showOnlyRSVP ? 'No RSVP\'d events for this day' : 'No events scheduled for this day'}
                 </div>
               )}
             </CardContent>
