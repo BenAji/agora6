@@ -1,6 +1,8 @@
 import { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Building2, Calendar, Users, Settings, BarChart3, LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 interface LayoutProps {
   children: ReactNode;
@@ -8,13 +10,15 @@ interface LayoutProps {
 }
 
 const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
+  const { signOut } = useAuth();
+  
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'events', label: 'Events', icon: Calendar },
-    { id: 'calendar', label: 'Calendar', icon: Calendar },
-    { id: 'companies', label: 'Companies', icon: Building2 },
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/dashboard' },
+    { id: 'events', label: 'Events', icon: Calendar, path: '/events' },
+    { id: 'calendar', label: 'Calendar', icon: Calendar, path: '/calendar' },
+    { id: 'companies', label: 'Companies', icon: Building2, path: '/companies' },
+    { id: 'users', label: 'Users', icon: Users, path: '/users' },
+    { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
   ];
 
   return (
@@ -40,17 +44,19 @@ const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
               const isActive = currentPage === item.id;
               return (
                 <li key={item.id}>
-                  <Button
-                    variant={isActive ? "default" : "ghost"}
-                    className={`w-full justify-start text-left ${
-                      isActive 
-                        ? 'bg-gold text-black font-semibold' 
-                        : 'text-text-secondary hover:text-gold hover:bg-surface-secondary'
-                    }`}
-                  >
-                    <Icon className="mr-3 h-4 w-4" />
-                    {item.label}
-                  </Button>
+                  <Link to={item.path}>
+                    <Button
+                      variant={isActive ? "default" : "ghost"}
+                      className={`w-full justify-start text-left ${
+                        isActive 
+                          ? 'bg-gold text-black font-semibold' 
+                          : 'text-text-secondary hover:text-gold hover:bg-surface-secondary'
+                      }`}
+                    >
+                      <Icon className="mr-3 h-4 w-4" />
+                      {item.label}
+                    </Button>
+                  </Link>
                 </li>
               );
             })}
@@ -61,6 +67,7 @@ const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
           <Button
             variant="ghost"
             className="w-full justify-start text-text-secondary hover:text-error"
+            onClick={signOut}
           >
             <LogOut className="mr-3 h-4 w-4" />
             Sign Out
