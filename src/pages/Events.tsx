@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Search, Filter, Plus, TrendingUp, Calendar, Clock, MapPin, Building2, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -28,6 +29,7 @@ const Events: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [eventFilter, setEventFilter] = useState<'all' | 'upcoming' | 'past'>('all');
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
@@ -77,11 +79,27 @@ const Events: React.FC = () => {
     }
   };
 
-  const filteredEvents = events.filter(event =>
-    event.eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    event.hostCompany?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    event.eventType.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEvents = events.filter(event => {
+    // Search filter
+    const matchesSearch = event.eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      event.hostCompany?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      event.eventType.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Event status filter
+    if (eventFilter === 'all') {
+      return matchesSearch;
+    } else if (eventFilter === 'upcoming') {
+      const eventDate = new Date(event.startDate);
+      const now = new Date();
+      return matchesSearch && eventDate >= now;
+    } else if (eventFilter === 'past') {
+      const eventDate = new Date(event.startDate);
+      const now = new Date();
+      return matchesSearch && eventDate < now;
+    }
+    
+    return matchesSearch;
+  });
 
   const handleViewDetails = (eventCard: any) => {
     // Find the original event from our events array using the eventCard id
@@ -204,26 +222,88 @@ const Events: React.FC = () => {
         {/* Search and Filters */}
         <Card variant="terminal">
           <CardContent className="p-6">
-            <div className="flex gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-text-muted" />
-                <Input 
-                  placeholder="Search events, companies, or types..." 
-                  className="pl-10"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-text-muted" />
+                  <Input 
+                    placeholder="Search events, companies, or types..." 
+                    className="pl-10"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="terminal">
+                      <Filter className="mr-2 h-4 w-4" />
+                      Filters
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 bg-surface-primary border border-border-default p-4">
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-text-primary">Event Status</h4>
+                      <div className="space-y-2">
+                        <Button
+                          variant={eventFilter === 'all' ? 'default' : 'ghost'}
+                          size="sm"
+                          className="w-full justify-start"
+                          onClick={() => setEventFilter('all')}
+                        >
+                          All Events
+                        </Button>
+                        <Button
+                          variant={eventFilter === 'upcoming' ? 'default' : 'ghost'}
+                          size="sm"
+                          className="w-full justify-start"
+                          onClick={() => setEventFilter('upcoming')}
+                        >
+                          Upcoming Events
+                        </Button>
+                        <Button
+                          variant={eventFilter === 'past' ? 'default' : 'ghost'}
+                          size="sm"
+                          className="w-full justify-start"
+                          onClick={() => setEventFilter('past')}
+                        >
+                          Past Events
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {canCreateEvents && (
+                  <Button onClick={() => setCreateEventOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Event
+                  </Button>
+                )}
               </div>
-              <Button variant="terminal">
-                <Filter className="mr-2 h-4 w-4" />
-                Filters
-              </Button>
-              {canCreateEvents && (
-                <Button onClick={() => setCreateEventOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Event
+              
+              {/* Quick Filter Toggle */}
+              <div className="flex gap-2">
+                <Button
+                  variant={eventFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setEventFilter('all')}
+                >
+                  All ({events.length})
                 </Button>
-              )}
+                <Button
+                  variant={eventFilter === 'upcoming' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setEventFilter('upcoming')}
+                >
+                  Upcoming ({events.filter(e => new Date(e.startDate) >= new Date()).length})
+                </Button>
+                <Button
+                  variant={eventFilter === 'past' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setEventFilter('past')}
+                >
+                  Past ({events.filter(e => new Date(e.startDate) < new Date()).length})
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
