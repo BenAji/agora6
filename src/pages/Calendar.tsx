@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameDay, isSameMonth, isToday, addWeeks, subWeeks, getWeek } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameDay, isSameMonth, isToday, addWeeks, subWeeks, getISOWeek } from 'date-fns';
 
 interface Event {
   eventID: string;
@@ -88,7 +88,7 @@ const CalendarPage: React.FC = () => {
 
   const getWeeksInMonth = () => {
     if (isWeekView) {
-      const start = startOfWeek(currentMonth);
+      const start = startOfWeek(currentMonth, { weekStartsOn: 1 }); // Start week on Monday
       return [{
         start,
         days: Array.from({ length: 5 }, (_, i) => addDays(start, i))
@@ -97,8 +97,8 @@ const CalendarPage: React.FC = () => {
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
-    const firstWeekStart = startOfWeek(monthStart);
-    const lastWeekEnd = endOfWeek(monthEnd);
+    const firstWeekStart = startOfWeek(monthStart, { weekStartsOn: 1 }); // Start week on Monday
+    const lastWeekEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
     
     const weeks = [];
     let currentWeekStart = firstWeekStart;
@@ -231,7 +231,7 @@ const CalendarPage: React.FC = () => {
                     {getWeeksInMonth().map((week, weekIndex) => (
                       <div key={weekIndex} className="grid grid-cols-5 border-r border-border-default">
                         <div className="col-span-5 p-2 text-center text-xs font-bold text-gold bg-surface-secondary border-b border-border-default">
-                          Week {weekIndex + 1}
+                          Week {getISOWeek(week.start)}
                         </div>
                         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day, dayIndex) => (
                           <div key={day} className="p-2 text-center text-xs font-bold text-gold bg-surface-secondary border-r last:border-r-0 border-border-default">
