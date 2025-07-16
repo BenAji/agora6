@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Filter, Plus, TrendingUp, Calendar, Clock, MapPin, Building2, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import CreateEventDialog from '@/components/CreateEventDialog';
 
 interface Event {
@@ -30,7 +31,9 @@ const Events: React.FC = () => {
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
+  const [isRSVPing, setIsRSVPing] = useState(false);
   const { profile, user } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchEvents();
@@ -91,6 +94,78 @@ const Events: React.FC = () => {
 
   const handleRSVPUpdate = () => {
     fetchEvents(); // Refresh events to get updated RSVP status
+  };
+
+  const handleDetailRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
+    if (!user || !selectedEvent) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to RSVP to events",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsRSVPing(true);
+    try {
+      // Check if user already has an RSVP for this event
+      const { data: existingRSVP, error: fetchError } = await supabase
+        .from('rsvps')
+        .select('*')
+        .eq('eventID', selectedEvent.eventID)
+        .eq('userID', user.id)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      if (existingRSVP) {
+        // Update existing RSVP
+        const { error: updateError } = await supabase
+          .from('rsvps')
+          .update({ 
+            status: status,
+            updatedAt: new Date().toISOString()
+          })
+          .eq('rsvpID', existingRSVP.rsvpID);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new RSVP
+        const { error: insertError } = await supabase
+          .from('rsvps')
+          .insert([{
+            eventID: selectedEvent.eventID,
+            userID: user.id,
+            status: status
+          }]);
+
+        if (insertError) throw insertError;
+      }
+
+      toast({
+        title: "RSVP Updated",
+        description: `Your RSVP status has been set to ${status.toLowerCase()}`,
+      });
+
+      fetchEvents(); // Refresh events to get updated RSVP status
+    } catch (error) {
+      console.error('Error updating RSVP:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update RSVP. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRSVPing(false);
+    }
+  };
+
+  const isEventPast = (eventDate: string) => {
+    const event = new Date(eventDate);
+    const now = new Date();
+    return event < now;
   };
 
   const canCreateEvents = profile?.role === 'IR_ADMIN';
@@ -244,6 +319,54 @@ const Events: React.FC = () => {
                     <p className="text-sm text-text-secondary leading-relaxed pl-6">
                       {selectedEvent.description}
                     </p>
+                  </div>
+                )}
+
+                {/* RSVP Actions */}
+                {!isEventPast(selectedEvent.startDate) && user && (
+                  <div className="border-t border-border-default pt-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-text-primary">RSVP to this event:</span>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="text-success border-success hover:bg-success hover:text-black"
+                          onClick={() => handleDetailRSVP('ACCEPTED')}
+                          disabled={isRSVPing}
+                        >
+                          Accept
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="text-error border-error hover:bg-error hover:text-white"
+                          onClick={() => handleDetailRSVP('DECLINED')}
+                          disabled={isRSVPing}
+                        >
+                          Decline
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="text-warning border-warning hover:bg-warning hover:text-black"
+                          onClick={() => handleDetailRSVP('TENTATIVE')}
+                          disabled={isRSVPing}
+                        >
+                          Tentative
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isEventPast(selectedEvent.startDate) && (
+                  <div className="border-t border-border-default pt-4">
+                    <div className="text-center">
+                      <Badge variant="outline" className="text-text-muted border-text-muted">
+                        This event has ended
+                      </Badge>
+                    </div>
                   </div>
                 )}
               </div>

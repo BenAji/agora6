@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Clock, MapPin, Users, Building2 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Calendar, Clock, MapPin, Users, Building2, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -49,7 +50,7 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
     }
   };
 
-  const handleRSVP = async () => {
+  const handleRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
     if (!user) {
       toast({
         title: "Authentication Required",
@@ -73,18 +74,12 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
         throw fetchError;
       }
 
-      let newStatus: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'PENDING' = 'ACCEPTED';
-      
       if (existingRSVP) {
-        // Update existing RSVP - cycle through statuses
-        const statusCycle: ('ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'PENDING')[] = ['ACCEPTED', 'DECLINED', 'TENTATIVE', 'PENDING'];
-        const currentIndex = statusCycle.indexOf(existingRSVP.status);
-        newStatus = statusCycle[(currentIndex + 1) % statusCycle.length];
-        
+        // Update existing RSVP
         const { error: updateError } = await supabase
           .from('rsvps')
           .update({ 
-            status: newStatus,
+            status: status,
             updatedAt: new Date().toISOString()
           })
           .eq('rsvpID', existingRSVP.rsvpID);
@@ -97,7 +92,7 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
           .insert([{
             eventID: event.id,
             userID: user.id,
-            status: newStatus
+            status: status
           }]);
 
         if (insertError) throw insertError;
@@ -105,7 +100,7 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
 
       toast({
         title: "RSVP Updated",
-        description: `Your RSVP status has been set to ${newStatus.toLowerCase()}`,
+        description: `Your RSVP status has been set to ${status.toLowerCase()}`,
       });
 
       if (onRSVPUpdate) {
@@ -121,6 +116,12 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
     } finally {
       setIsRSVPing(false);
     }
+  };
+
+  const isEventPast = () => {
+    const eventDate = new Date(event.startDate || event.date);
+    const now = new Date();
+    return eventDate < now;
   };
 
   const handleViewDetails = () => {
@@ -187,15 +188,50 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
           >
             View Details
           </Button>
-          <Button 
-            size="sm" 
-            variant="default" 
-            className="flex-1"
-            onClick={handleRSVP}
-            disabled={isRSVPing}
-          >
-            {isRSVPing ? 'Updating...' : 'RSVP'}
-          </Button>
+          {isEventPast() ? (
+            <Button 
+              size="sm" 
+              variant="secondary" 
+              className="flex-1"
+              disabled
+            >
+              Event Ended
+            </Button>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  size="sm" 
+                  variant="default" 
+                  className="flex-1"
+                  disabled={isRSVPing}
+                >
+                  {isRSVPing ? 'Updating...' : 'RSVP'}
+                  <ChevronDown className="ml-1 h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-surface-primary border border-border-default">
+                <DropdownMenuItem 
+                  onClick={() => handleRSVP('ACCEPTED')}
+                  className="text-success hover:bg-surface-secondary"
+                >
+                  Accept
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => handleRSVP('DECLINED')}
+                  className="text-error hover:bg-surface-secondary"
+                >
+                  Decline
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => handleRSVP('TENTATIVE')}
+                  className="text-warning hover:bg-surface-secondary"
+                >
+                  Tentative
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </CardContent>
     </Card>
