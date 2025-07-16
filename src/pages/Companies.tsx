@@ -80,7 +80,13 @@ const Companies: React.FC = () => {
     return subscriptions.some(sub => 
       sub.userID === user?.id && 
       sub.status === 'ACTIVE' &&
-      sub.gicsSector === company.gicsSector
+      sub.gicsSector === company.gicsSector &&
+      (
+        // Either subscribed to the entire sector (no gicsSubCategory)
+        !sub.gicsSubCategory ||
+        // Or subscribed to the specific subsector that matches the company
+        sub.gicsSubCategory === company.gicsSubCategory
+      )
     );
   };
 
