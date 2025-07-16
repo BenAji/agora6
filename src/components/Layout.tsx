@@ -22,58 +22,56 @@ const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
   ];
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Bloomberg-style Sidebar */}
-      <aside className="w-64 bg-surface-primary border-r border-border-default">
-        <div className="p-6 border-b border-border-default">
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Top Navigation Bar */}
+      <header className="bg-surface-primary border-b border-border-default">
+        <div className="flex items-center justify-between px-4 py-2">
+          {/* Logo */}
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-gold rounded-sm flex items-center justify-center">
-              <span className="text-black font-bold text-sm">A</span>
+            <div className="w-6 h-6 bg-gradient-gold rounded-sm flex items-center justify-center">
+              <span className="text-black font-bold text-xs">A</span>
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gold">AGORA</h1>
-              <p className="text-xs text-text-secondary">Event Coordination</p>
+              <h1 className="text-sm font-bold text-gold">AGORA</h1>
             </div>
           </div>
-        </div>
-        
-        <nav className="p-4">
-          <ul className="space-y-2">
+          
+          {/* Navigation */}
+          <nav className="flex items-center space-x-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPage === item.id;
               return (
-                <li key={item.id}>
-                  <Link to={item.path}>
-                    <Button
-                      variant={isActive ? "default" : "ghost"}
-                      className={`w-full justify-start text-left ${
-                        isActive 
-                          ? 'bg-gold text-black font-semibold' 
-                          : 'text-text-secondary hover:text-gold hover:bg-surface-secondary'
-                      }`}
-                    >
-                      <Icon className="mr-3 h-4 w-4" />
-                      {item.label}
-                    </Button>
-                  </Link>
-                </li>
+                <Link key={item.id} to={item.path}>
+                  <Button
+                    variant={isActive ? "default" : "ghost"}
+                    size="sm"
+                    className={`text-xs ${
+                      isActive 
+                        ? 'bg-gold text-black font-semibold' 
+                        : 'text-text-secondary hover:text-gold hover:bg-surface-secondary'
+                    }`}
+                  >
+                    <Icon className="mr-1 h-3 w-3" />
+                    {item.label}
+                  </Button>
+                </Link>
               );
             })}
-          </ul>
-        </nav>
-        
-        <div className="absolute bottom-4 left-4 right-4">
+          </nav>
+          
+          {/* Sign Out */}
           <Button
             variant="ghost"
-            className="w-full justify-start text-text-secondary hover:text-error"
+            size="sm"
+            className="text-xs text-text-secondary hover:text-error"
             onClick={signOut}
           >
-            <LogOut className="mr-3 h-4 w-4" />
+            <LogOut className="mr-1 h-3 w-3" />
             Sign Out
           </Button>
         </div>
-      </aside>
+      </header>
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">

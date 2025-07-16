@@ -155,88 +155,83 @@ const CalendarPage: React.FC = () => {
 
   return (
     <Layout currentPage="calendar">
-      <div className="p-8 space-y-6">
-        {/* Calendar Header */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gold mb-2">Calendar</h1>
-            <p className="text-text-secondary">
-              Company events calendar view
-            </p>
-          </div>
-          <div className="flex gap-3 items-center">
+      <div className="p-2 space-y-2">
+        {/* Compact Calendar Header */}
+        <div className="flex justify-between items-center bg-surface-primary p-2 border border-border-default">
+          <div className="flex items-center space-x-2">
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={() => setIsWeekView(!isWeekView)}
-              className="flex items-center gap-2"
+              onClick={isWeekView ? () => setCurrentMonth(subWeeks(currentMonth, 1)) : goToPreviousMonth}
+              className="h-6 w-6 p-0"
             >
-              {isWeekView ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-              {isWeekView ? 'Week View' : 'Month View'}
+              <ChevronLeft className="h-3 w-3" />
             </Button>
-            <Button variant="terminal">
-              <Filter className="mr-2 h-4 w-4" />
-              Filters
+            <h1 className="text-sm font-bold text-gold min-w-[120px] text-center">
+              {isWeekView 
+                ? `Week ${getISOWeek(currentMonth)} - ${format(currentMonth, 'MMM yyyy')}`
+                : format(currentMonth, 'MMMM yyyy')
+              }
+            </h1>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={isWeekView ? () => setCurrentMonth(addWeeks(currentMonth, 1)) : goToNextMonth}
+              className="h-6 w-6 p-0"
+            >
+              <ChevronRight className="h-3 w-3" />
             </Button>
-            <Button variant="ghost">
-              <Download className="mr-2 h-4 w-4" />
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <span className="text-xs text-text-secondary">Month</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsWeekView(!isWeekView)}
+              className="p-0 h-5 w-8"
+            >
+              {isWeekView ? <ToggleRight className="h-4 w-4 text-gold" /> : <ToggleLeft className="h-4 w-4 text-text-secondary" />}
+            </Button>
+            <span className="text-xs text-text-secondary">Week</span>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
+              <Filter className="h-3 w-3 mr-1" />
+              Filter
+            </Button>
+            <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
+              <Download className="h-3 w-3 mr-1" />
               Export
             </Button>
           </div>
         </div>
 
-        {/* Navigation Header */}
-        <Card variant="terminal">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={isWeekView ? () => setCurrentMonth(subWeeks(currentMonth, 1)) : goToPreviousMonth}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <CardTitle className="text-gold font-mono">
-                {isWeekView 
-                  ? `Week of ${format(startOfWeek(currentMonth), 'MMM d, yyyy')}`
-                  : format(currentMonth, 'MMMM yyyy')
-                }
-              </CardTitle>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={isWeekView ? () => setCurrentMonth(addWeeks(currentMonth, 1)) : goToNextMonth}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardHeader>
-        </Card>
-
         {/* Main Calendar Grid */}
         <Card variant="terminal">
           <CardContent className="p-0">
             {loading ? (
-              <div className="flex items-center justify-center h-96">
-                <div className="text-text-secondary">Loading calendar...</div>
+              <div className="flex items-center justify-center h-60">
+                <div className="text-text-secondary text-sm">Loading calendar...</div>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <div className="min-w-[1000px]">
+                <div className="min-w-[800px]">
                   {/* Header Row */}
-                  <div className="grid border-b border-border-default" style={{ gridTemplateColumns: '200px repeat(auto-fit, minmax(120px, 1fr))' }}>
-                    <div className="p-3 font-bold text-gold border-r border-border-default bg-surface-secondary">
+                  <div className="grid border-b border-border-default" style={{ gridTemplateColumns: '120px repeat(auto-fit, minmax(100px, 1fr))' }}>
+                    <div className="p-1 font-bold text-gold border-r border-border-default bg-surface-secondary text-xs">
                       Company
                     </div>
                     {getWeeksInMonth().map((week, weekIndex) => (
                       <div key={weekIndex} className="grid grid-cols-5 border-r border-border-default">
-                        <div className="col-span-5 p-2 text-center text-xs font-bold text-gold bg-surface-secondary border-b border-border-default">
+                        <div className="col-span-5 p-1 text-center text-xs font-bold text-gold bg-surface-secondary border-b border-border-default">
                           Week {getISOWeek(week.start)}
                         </div>
                         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day, dayIndex) => (
-                          <div key={day} className="p-2 text-center text-xs font-bold text-gold bg-surface-secondary border-r last:border-r-0 border-border-default">
+                          <div key={day} className="p-1 text-center text-xs font-bold text-gold bg-surface-secondary border-r last:border-r-0 border-border-default">
                             <div>{day}</div>
-                            <div className="text-text-muted">
+                            <div className="text-text-muted text-xs">
                               {format(week.days[dayIndex], 'd')}
                             </div>
                           </div>
@@ -247,9 +242,9 @@ const CalendarPage: React.FC = () => {
 
                   {/* Company Rows */}
                   {companies.map((company) => (
-                    <div key={company.companyID} className="grid border-b border-border-default hover:bg-surface-secondary/30" style={{ gridTemplateColumns: '200px repeat(auto-fit, minmax(120px, 1fr))' }}>
-                      <div className="p-3 border-r border-border-default font-medium text-text-primary bg-surface-primary">
-                        <div className="truncate" title={company.companyName}>
+                    <div key={company.companyID} className="grid border-b border-border-default hover:bg-surface-secondary/30" style={{ gridTemplateColumns: '120px repeat(auto-fit, minmax(100px, 1fr))' }}>
+                      <div className="p-1 border-r border-border-default font-medium text-text-primary bg-surface-primary">
+                        <div className="truncate text-xs pr-1" title={company.companyName}>
                           {company.companyName}
                         </div>
                       </div>
@@ -265,7 +260,7 @@ const CalendarPage: React.FC = () => {
                               <div
                                 key={dayIndex}
                                 className={`
-                                  min-h-[60px] p-1 border-r last:border-r-0 border-border-default relative
+                                  min-h-[40px] p-0.5 border-r last:border-r-0 border-border-default relative
                                   transition-all duration-200 hover:bg-surface-secondary/50 cursor-pointer
                                   ${!isCurrentMonth ? 'bg-surface-secondary/20' : 'bg-surface-primary'}
                                   ${isDayToday ? 'bg-gold/10' : ''}
@@ -273,13 +268,13 @@ const CalendarPage: React.FC = () => {
                                 onClick={() => setSelectedDate(day)}
                               >
                                 {dayEvents.length > 0 && (
-                                  <div className="space-y-1">
-                                    {dayEvents.slice(0, 2).map((event) => (
+                                  <div className="space-y-0.5">
+                                    {dayEvents.slice(0, 1).map((event) => (
                                       <Badge
                                         key={event.eventID}
                                         variant="secondary"
                                         className={`
-                                          text-xs p-1 w-full justify-start truncate
+                                          text-xs p-0.5 w-full justify-start truncate
                                           ${getEventTypeColor(event.eventType)}
                                         `}
                                         title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}`}
@@ -287,9 +282,9 @@ const CalendarPage: React.FC = () => {
                                         {event.eventType.split('_')[0]}
                                       </Badge>
                                     ))}
-                                    {dayEvents.length > 2 && (
+                                    {dayEvents.length > 1 && (
                                       <div className="text-xs text-text-muted text-center">
-                                        +{dayEvents.length - 2}
+                                        +{dayEvents.length - 1}
                                       </div>
                                     )}
                                   </div>
