@@ -41,6 +41,7 @@ const CalendarPage: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [userRSVPs, setUserRSVPs] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventDetailsOpen, setEventDetailsOpen] = useState(false);
@@ -93,12 +94,17 @@ const CalendarPage: React.FC = () => {
           .order('startDate');
       }
 
-      // Fetch subscriptions if user is logged in
+      // Fetch subscriptions and RSVPs if user is logged in
       const subscriptionsPromise = user ? supabase
         .from('subscriptions')
         .select('subID, userID, status, gicsSector, gicsSubCategory')
         .eq('userID', user.id)
         .eq('status', 'ACTIVE') : Promise.resolve({ data: [], error: null });
+
+      const rsvpsPromise = user ? supabase
+        .from('rsvps')
+        .select('eventID, status, rsvpID')
+        .eq('userID', user.id) : Promise.resolve({ data: [], error: null });
 
       // Get companies from GICS database for all companies
       const allCompaniesPromise = supabase
@@ -106,18 +112,21 @@ const CalendarPage: React.FC = () => {
         .select('companyID, companyName, gicsSector, gicsSubCategory')
         .order('companyName');
 
-      const [eventsResponse, subscriptionsResponse, allCompaniesResponse] = await Promise.all([
+      const [eventsResponse, subscriptionsResponse, rsvpsResponse, allCompaniesResponse] = await Promise.all([
         eventsQuery,
         subscriptionsPromise,
+        rsvpsPromise,
         allCompaniesPromise
       ]);
 
       if (eventsResponse.error) throw eventsResponse.error;
       if (subscriptionsResponse.error) throw subscriptionsResponse.error;
+      if (rsvpsResponse.error) throw rsvpsResponse.error;
       if (allCompaniesResponse.error) throw allCompaniesResponse.error;
       
       const fetchedEvents = eventsResponse.data || [];
       const userSubscriptions = subscriptionsResponse.data || [];
+      const userRSVPsData = rsvpsResponse.data || [];
       const allCompanies = allCompaniesResponse.data || [];
       
       // Filter companies based on subscriptions
@@ -164,6 +173,7 @@ const CalendarPage: React.FC = () => {
       setEvents(fetchedEvents);
       setCompanies(filteredCompanies);
       setSubscriptions(userSubscriptions);
+      setUserRSVPs(userRSVPsData);
     } catch (error) {
       console.error('Error fetching calendar data:', error);
     } finally {
@@ -309,6 +319,80 @@ const CalendarPage: React.FC = () => {
     const eventDate = new Date(event.endDate || event.startDate);
     const now = new Date();
     return eventDate < now;
+  };
+
+  // Get RSVP status for a specific event
+  const getRSVPStatus = (eventID: string) => {
+    const rsvp = userRSVPs.find(r => r.eventID === eventID);
+    return rsvp?.status || null;
+  };
+
+  // Quick RSVP function for grid usage
+  const handleQuickRSVP = async (eventID: string, status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to RSVP to events",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Check if user already has an RSVP for this event
+      const existingRSVP = userRSVPs.find(r => r.eventID === eventID);
+
+      if (existingRSVP) {
+        // Update existing RSVP
+        const { error: updateError } = await supabase
+          .from('rsvps')
+          .update({ 
+            status: status,
+            updatedAt: new Date().toISOString()
+          })
+          .eq('rsvpID', existingRSVP.rsvpID);
+
+        if (updateError) throw updateError;
+
+        // Update local state
+        setUserRSVPs(prev => prev.map(rsvp => 
+          rsvp.eventID === eventID ? { ...rsvp, status } : rsvp
+        ));
+      } else {
+        // Create new RSVP
+        const { data, error: insertError } = await supabase
+          .from('rsvps')
+          .insert([{
+            eventID: eventID,
+            userID: user.id,
+            status: status
+          }])
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        // Add to local state
+        setUserRSVPs(prev => [...prev, data]);
+      }
+
+      toast({
+        title: "RSVP Updated",
+        description: `Set to ${status.toLowerCase()}`,
+      });
+
+      // If showing only RSVP events and status is not ACCEPTED, refresh to potentially remove from view
+      if (showOnlyRSVP && status !== 'ACCEPTED') {
+        fetchData();
+      }
+    } catch (error) {
+      console.error('Error updating RSVP:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update RSVP",
+        variant: "destructive",
+      });
+    }
   };
 
   if (!canAccessCalendar) {
@@ -505,23 +589,82 @@ const CalendarPage: React.FC = () => {
                               >
                                 {dayEvents.length > 0 && (
                                    <div className="space-y-0.5">
-                                     {dayEvents.slice(0, 2).map((event) => (
-                                       <Badge
-                                         key={event.eventID}
-                                         variant="secondary"
-                                         className={`
-                                           text-xs p-0.5 w-full justify-start truncate cursor-pointer hover:opacity-80 transition-opacity
-                                           ${getEventTypeColor(event.eventType)}
-                                         `}
-                                         title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}${showOnlyRSVP ? ' (RSVP\'d)' : ''}`}
-                                         onClick={(e) => {
-                                           e.stopPropagation();
-                                           handleEventClick(event);
-                                         }}
-                                       >
-                                         {event.eventName.length > 8 ? event.eventName.substring(0, 8) + '...' : event.eventName}
-                                       </Badge>
-                                     ))}
+                                      {dayEvents.slice(0, 2).map((event) => {
+                                        const rsvpStatus = getRSVPStatus(event.eventID);
+                                        const isEventInPast = isEventPast(event);
+                                        return (
+                                          <div key={event.eventID} className="group relative">
+                                            <DropdownMenu>
+                                              <DropdownMenuTrigger asChild>
+                                                <Badge
+                                                  variant="secondary"
+                                                  className={`
+                                                    text-xs p-0.5 w-full justify-start truncate cursor-pointer hover:opacity-80 transition-opacity relative
+                                                    ${getEventTypeColor(event.eventType)}
+                                                    ${rsvpStatus === 'ACCEPTED' ? 'ring-1 ring-success' : ''}
+                                                    ${rsvpStatus === 'DECLINED' ? 'ring-1 ring-error' : ''}
+                                                    ${rsvpStatus === 'TENTATIVE' ? 'ring-1 ring-warning' : ''}
+                                                  `}
+                                                  title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}${rsvpStatus ? ` (${rsvpStatus})` : ''}`}
+                                                >
+                                                  <span className="truncate">
+                                                    {event.eventName.length > 6 ? event.eventName.substring(0, 6) + '...' : event.eventName}
+                                                  </span>
+                                                  {rsvpStatus && (
+                                                    <span className="ml-1 text-xs">
+                                                      {rsvpStatus === 'ACCEPTED' ? '✓' : rsvpStatus === 'DECLINED' ? '✗' : '?'}
+                                                    </span>
+                                                  )}
+                                                </Badge>
+                                              </DropdownMenuTrigger>
+                                              {!isEventInPast && (
+                                                <DropdownMenuContent 
+                                                  align="start" 
+                                                  className="bg-surface-primary border border-border-default z-50 min-w-[120px]"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  <DropdownMenuItem 
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleQuickRSVP(event.eventID, 'ACCEPTED');
+                                                    }}
+                                                    className="text-success hover:bg-surface-secondary text-xs"
+                                                  >
+                                                    ✓ Accept
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem 
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleQuickRSVP(event.eventID, 'DECLINED');
+                                                    }}
+                                                    className="text-error hover:bg-surface-secondary text-xs"
+                                                  >
+                                                    ✗ Decline
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem 
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleQuickRSVP(event.eventID, 'TENTATIVE');
+                                                    }}
+                                                    className="text-warning hover:bg-surface-secondary text-xs"
+                                                  >
+                                                    ? Tentative
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem 
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleEventClick(event);
+                                                    }}
+                                                    className="text-text-secondary hover:bg-surface-secondary text-xs border-t border-border-default"
+                                                  >
+                                                    View Details
+                                                  </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                              )}
+                                            </DropdownMenu>
+                                          </div>
+                                        );
+                                      })}
                                      {dayEvents.length > 2 && (
                                        <div 
                                          className="text-xs text-text-muted text-center cursor-pointer hover:text-gold transition-colors"
