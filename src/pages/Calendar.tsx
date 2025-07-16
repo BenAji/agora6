@@ -205,7 +205,7 @@ const CalendarPage: React.FC = () => {
               onClick={() => setShowLegend(!showLegend)}
             >
               {showLegend ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
-              Legend
+              Event Category
             </Button>
             <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
               <Filter className="h-3 w-3 mr-1" />
@@ -223,7 +223,6 @@ const CalendarPage: React.FC = () => {
           <Card variant="terminal" className="mb-2">
             <CardContent className="p-3">
               <div className="flex flex-wrap gap-2">
-                <div className="text-xs font-bold text-gold mb-1 w-full">Event Types:</div>
                 {[
                   { type: 'EARNINGS_CALL', label: 'Earnings Call' },
                   { type: 'INVESTOR_MEETING', label: 'Investor Meeting' },
