@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar } from '@/components/ui/calendar';
-import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameDay, isSameMonth, isToday } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameDay, isSameMonth, isToday, addWeeks, subWeeks, getWeek } from 'date-fns';
 
 interface Event {
   eventID: string;
@@ -15,6 +15,7 @@ interface Event {
   hostCompany: string;
   startDate: string;
   location: string;
+  companyID: string;
 }
 
 interface Company {
@@ -25,8 +26,10 @@ interface Company {
 const CalendarPage: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [events, setEvents] = useState<Event[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [loading, setLoading] = useState(true);
+  const [isWeekView, setIsWeekView] = useState(false);
   const { profile } = useAuth();
 
   // Check if user can access calendar (Investment Analysts and Analyst Managers only)
@@ -46,15 +49,24 @@ const CalendarPage: React.FC = () => {
       const monthStart = startOfWeek(startOfMonth(currentMonth));
       const monthEnd = endOfWeek(endOfMonth(currentMonth));
 
-      const { data: eventsData, error } = await supabase
-        .from('events')
-        .select('*, user_companies(companyName)')
-        .gte('startDate', monthStart.toISOString())
-        .lte('startDate', monthEnd.toISOString())
-        .order('startDate');
+      const [eventsResponse, companiesResponse] = await Promise.all([
+        supabase
+          .from('events')
+          .select('*, user_companies(companyName)')
+          .gte('startDate', monthStart.toISOString())
+          .lte('startDate', monthEnd.toISOString())
+          .order('startDate'),
+        supabase
+          .from('user_companies')
+          .select('*')
+          .order('companyName')
+      ]);
 
-      if (error) throw error;
-      setEvents(eventsData || []);
+      if (eventsResponse.error) throw eventsResponse.error;
+      if (companiesResponse.error) throw companiesResponse.error;
+      
+      setEvents(eventsResponse.data || []);
+      setCompanies(companiesResponse.data || []);
     } catch (error) {
       console.error('Error fetching calendar data:', error);
     } finally {
@@ -74,18 +86,39 @@ const CalendarPage: React.FC = () => {
     return events.filter(event => isSameDay(new Date(event.startDate), day));
   };
 
-  const getCalendarDays = () => {
-    const start = startOfWeek(startOfMonth(currentMonth));
-    const end = endOfWeek(endOfMonth(currentMonth));
-    const days = [];
-    let day = start;
-
-    while (day <= end) {
-      days.push(day);
-      day = addDays(day, 1);
+  const getWeeksInMonth = () => {
+    if (isWeekView) {
+      const start = startOfWeek(currentMonth);
+      return [{
+        start,
+        days: Array.from({ length: 5 }, (_, i) => addDays(start, i))
+      }];
     }
 
-    return days;
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const firstWeekStart = startOfWeek(monthStart);
+    const lastWeekEnd = endOfWeek(monthEnd);
+    
+    const weeks = [];
+    let currentWeekStart = firstWeekStart;
+    
+    while (currentWeekStart <= lastWeekEnd) {
+      weeks.push({
+        start: currentWeekStart,
+        days: Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i))
+      });
+      currentWeekStart = addDays(currentWeekStart, 7);
+    }
+    
+    return weeks;
+  };
+
+  const getEventsForCompanyAndDay = (company: Company, day: Date) => {
+    return events.filter(event => 
+      isSameDay(new Date(event.startDate), day) && 
+      event.companyID === company.companyID
+    );
   };
 
   const getEventTypeColor = (eventType: string) => {
@@ -118,7 +151,7 @@ const CalendarPage: React.FC = () => {
     );
   }
 
-  const calendarDays = getCalendarDays();
+  
 
   return (
     <Layout currentPage="calendar">
@@ -128,10 +161,19 @@ const CalendarPage: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gold mb-2">Calendar</h1>
             <p className="text-text-secondary">
-              Professional monthly event calendar
+              Company events calendar view
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => setIsWeekView(!isWeekView)}
+              className="flex items-center gap-2"
+            >
+              {isWeekView ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+              {isWeekView ? 'Week View' : 'Month View'}
+            </Button>
             <Button variant="terminal">
               <Filter className="mr-2 h-4 w-4" />
               Filters
@@ -143,158 +185,127 @@ const CalendarPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Calendar Sidebar */}
-          <div className="space-y-6">
-            {/* Month Navigation */}
-            <Card variant="terminal">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <Button variant="ghost" size="sm" onClick={goToPreviousMonth}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <CardTitle className="text-gold font-mono">
-                    {format(currentMonth, 'MMMM yyyy')}
-                  </CardTitle>
-                  <Button variant="ghost" size="sm" onClick={goToNextMonth}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  month={currentMonth}
-                  onMonthChange={setCurrentMonth}
-                  className="p-0"
-                  classNames={{
-                    months: "flex flex-col space-y-0",
-                    month: "space-y-0",
-                    caption: "hidden",
-                    table: "w-full border-collapse",
-                    head_row: "flex",
-                    head_cell: "text-gold text-xs font-mono w-8 h-8 flex items-center justify-center",
-                    row: "flex w-full",
-                    cell: "h-8 w-8 text-center text-xs relative p-0 [&:has([aria-selected])]:bg-gold/20",
-                    day: "h-8 w-8 p-0 font-normal hover:bg-surface-secondary",
-                    day_selected: "bg-gold text-black font-bold",
-                    day_today: "bg-gold/20 text-gold font-bold",
-                    day_outside: "text-text-muted opacity-50",
-                  }}
-                />
-              </CardContent>
-            </Card>
+        {/* Navigation Header */}
+        <Card variant="terminal">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={isWeekView ? () => setCurrentMonth(subWeeks(currentMonth, 1)) : goToPreviousMonth}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <CardTitle className="text-gold font-mono">
+                {isWeekView 
+                  ? `Week of ${format(startOfWeek(currentMonth), 'MMM d, yyyy')}`
+                  : format(currentMonth, 'MMMM yyyy')
+                }
+              </CardTitle>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={isWeekView ? () => setCurrentMonth(addWeeks(currentMonth, 1)) : goToNextMonth}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+        </Card>
 
-            {/* Event Types Legend */}
-            <Card variant="terminal">
-              <CardHeader>
-                <CardTitle className="text-gold text-sm">Event Types</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {[
-                  { type: 'EARNINGS_CALL', label: 'Earnings Call' },
-                  { type: 'INVESTOR_MEETING', label: 'Investor Meeting' },
-                  { type: 'CONFERENCE', label: 'Conference' },
-                  { type: 'ROADSHOW', label: 'Roadshow' },
-                  { type: 'ANALYST_DAY', label: 'Analyst Day' },
-                  { type: 'PRODUCT_LAUNCH', label: 'Product Launch' },
-                  { type: 'OTHER', label: 'Other' }
-                ].map(({ type, label }) => (
-                  <div key={type} className="flex items-center space-x-2">
-                    <div className={`w-3 h-3 rounded border ${getEventTypeColor(type)}`}></div>
-                    <span className="text-xs text-text-secondary">{label}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Main Calendar Grid */}
-          <div className="lg:col-span-3">
-            <Card variant="terminal">
-              <CardHeader>
-                <CardTitle className="text-gold flex items-center">
-                  <CalendarDays className="mr-2 h-5 w-5" />
-                  {format(currentMonth, 'MMMM yyyy')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                {loading ? (
-                  <div className="flex items-center justify-center h-96">
-                    <div className="text-text-secondary">Loading calendar...</div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-7 gap-1">
-                    {/* Day Headers */}
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                      <div key={day} className="p-2 text-center text-gold font-mono text-sm font-bold">
-                        {day}
+        {/* Main Calendar Grid */}
+        <Card variant="terminal">
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="flex items-center justify-center h-96">
+                <div className="text-text-secondary">Loading calendar...</div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="min-w-[1000px]">
+                  {/* Header Row */}
+                  <div className="grid border-b border-border-default" style={{ gridTemplateColumns: '200px repeat(auto-fit, minmax(120px, 1fr))' }}>
+                    <div className="p-3 font-bold text-gold border-r border-border-default bg-surface-secondary">
+                      Company
+                    </div>
+                    {getWeeksInMonth().map((week, weekIndex) => (
+                      <div key={weekIndex} className="grid grid-cols-5 border-r border-border-default">
+                        <div className="col-span-5 p-2 text-center text-xs font-bold text-gold bg-surface-secondary border-b border-border-default">
+                          Week {weekIndex + 1}
+                        </div>
+                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day, dayIndex) => (
+                          <div key={day} className="p-2 text-center text-xs font-bold text-gold bg-surface-secondary border-r last:border-r-0 border-border-default">
+                            <div>{day}</div>
+                            <div className="text-text-muted">
+                              {format(week.days[dayIndex], 'd')}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ))}
-                    
-                    {/* Calendar Days */}
-                    {calendarDays.map((day) => {
-                      const dayEvents = getEventsForDay(day);
-                      const isCurrentMonth = isSameMonth(day, currentMonth);
-                      const isDayToday = isToday(day);
-                      const isSelected = selectedDate && isSameDay(day, selectedDate);
-
-                      return (
-                        <div
-                          key={day.toISOString()}
-                          className={`
-                            min-h-[120px] p-2 border border-border-default
-                            cursor-pointer transition-all duration-200 hover:bg-surface-secondary/50
-                            ${!isCurrentMonth ? 'bg-surface-secondary/20 text-text-muted' : 'bg-surface-primary'}
-                            ${isDayToday ? 'ring-2 ring-gold ring-inset' : ''}
-                            ${isSelected ? 'bg-gold/10 border-gold' : ''}
-                          `}
-                          onClick={() => setSelectedDate(day)}
-                        >
-                          <div className={`
-                            text-sm font-mono mb-1
-                            ${isDayToday ? 'text-gold font-bold' : isCurrentMonth ? 'text-text-primary' : 'text-text-muted'}
-                          `}>
-                            {format(day, 'd')}
-                          </div>
-                          
-                          <div className="space-y-1">
-                            {dayEvents.slice(0, 3).map((event) => (
-                              <div
-                                key={event.eventID}
-                                className={`
-                                  text-xs p-1 rounded border cursor-pointer
-                                  transition-all duration-200 hover:scale-105
-                                  ${getEventTypeColor(event.eventType)}
-                                `}
-                                title={`${event.eventName}\n${event.hostCompany || ''}\n${event.location || ''}\n${format(new Date(event.startDate), 'h:mm a')}`}
-                              >
-                                <div className="font-semibold truncate">
-                                  {event.eventName}
-                                </div>
-                                <div className="truncate opacity-80">
-                                  {event.hostCompany}
-                                </div>
-                              </div>
-                            ))}
-                            
-                            {dayEvents.length > 3 && (
-                              <div className="text-xs text-text-muted p-1">
-                                +{dayEvents.length - 3} more
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+
+                  {/* Company Rows */}
+                  {companies.map((company) => (
+                    <div key={company.companyID} className="grid border-b border-border-default hover:bg-surface-secondary/30" style={{ gridTemplateColumns: '200px repeat(auto-fit, minmax(120px, 1fr))' }}>
+                      <div className="p-3 border-r border-border-default font-medium text-text-primary bg-surface-primary">
+                        <div className="truncate" title={company.companyName}>
+                          {company.companyName}
+                        </div>
+                      </div>
+                      
+                      {getWeeksInMonth().map((week, weekIndex) => (
+                        <div key={weekIndex} className="grid grid-cols-5 border-r border-border-default">
+                          {week.days.map((day, dayIndex) => {
+                            const dayEvents = getEventsForCompanyAndDay(company, day);
+                            const isCurrentMonth = isSameMonth(day, currentMonth);
+                            const isDayToday = isToday(day);
+                            
+                            return (
+                              <div
+                                key={dayIndex}
+                                className={`
+                                  min-h-[60px] p-1 border-r last:border-r-0 border-border-default relative
+                                  transition-all duration-200 hover:bg-surface-secondary/50 cursor-pointer
+                                  ${!isCurrentMonth ? 'bg-surface-secondary/20' : 'bg-surface-primary'}
+                                  ${isDayToday ? 'bg-gold/10' : ''}
+                                `}
+                                onClick={() => setSelectedDate(day)}
+                              >
+                                {dayEvents.length > 0 && (
+                                  <div className="space-y-1">
+                                    {dayEvents.slice(0, 2).map((event) => (
+                                      <Badge
+                                        key={event.eventID}
+                                        variant="secondary"
+                                        className={`
+                                          text-xs p-1 w-full justify-start truncate
+                                          ${getEventTypeColor(event.eventType)}
+                                        `}
+                                        title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}`}
+                                      >
+                                        {event.eventType.split('_')[0]}
+                                      </Badge>
+                                    ))}
+                                    {dayEvents.length > 2 && (
+                                      <div className="text-xs text-text-muted text-center">
+                                        +{dayEvents.length - 2}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Selected Day Events */}
         {selectedDate && (
