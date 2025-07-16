@@ -89,7 +89,7 @@ const Dashboard: React.FC = () => {
             </p>
           </div>
           <div className="flex gap-3">
-            <Button variant="terminal">
+            <Button variant="terminal" onClick={() => navigate('/calendar')}>
               <CalendarIcon className="mr-2 h-4 w-4" />
               Calendar View
             </Button>
