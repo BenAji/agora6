@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Filter, Plus, TrendingUp, Calendar, Clock, MapPin, Building2, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -22,6 +23,9 @@ interface Event {
   endDate: string;
   location: string;
   description: string;
+  tickerSymbol?: string;
+  gicsSector?: string;
+  gicsSubSector?: string;
   rsvpStatus?: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'PENDING';
 }
 
@@ -30,6 +34,10 @@ const Events: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [eventFilter, setEventFilter] = useState<'all' | 'upcoming' | 'past'>('all');
+  const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
+  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
+  const [selectedTickerSymbols, setSelectedTickerSymbols] = useState<string[]>([]);
+  const [selectedGicsSectors, setSelectedGicsSectors] = useState<string[]>([]);
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
@@ -85,21 +93,39 @@ const Events: React.FC = () => {
       event.hostCompany?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       event.eventType.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Event status filter
-    if (eventFilter === 'all') {
-      return matchesSearch;
-    } else if (eventFilter === 'upcoming') {
+    // Event status filter (upcoming/past/all)
+    let matchesTimeFilter = true;
+    if (eventFilter === 'upcoming') {
       const eventDate = new Date(event.startDate);
       const now = new Date();
-      return matchesSearch && eventDate >= now;
+      matchesTimeFilter = eventDate >= now;
     } else if (eventFilter === 'past') {
       const eventDate = new Date(event.startDate);
       const now = new Date();
-      return matchesSearch && eventDate < now;
+      matchesTimeFilter = eventDate < now;
     }
     
-    return matchesSearch;
+    // Advanced filters
+    const matchesEventType = selectedEventTypes.length === 0 || selectedEventTypes.includes(event.eventType);
+    const matchesCompany = selectedCompanies.length === 0 || selectedCompanies.includes(event.hostCompany || '');
+    const matchesTickerSymbol = selectedTickerSymbols.length === 0 || selectedTickerSymbols.includes(event.tickerSymbol || '');
+    const matchesGicsSector = selectedGicsSectors.length === 0 || selectedGicsSectors.includes(event.gicsSector || '');
+    
+    return matchesSearch && matchesTimeFilter && matchesEventType && matchesCompany && matchesTickerSymbol && matchesGicsSector;
   });
+
+  // Get unique filter options from events
+  const uniqueEventTypes = [...new Set(events.map(e => e.eventType).filter(Boolean))];
+  const uniqueCompanies = [...new Set(events.map(e => e.hostCompany).filter(Boolean))];
+  const uniqueTickerSymbols = [...new Set(events.map(e => e.tickerSymbol).filter(Boolean))];
+  const uniqueGicsSectors = [...new Set(events.map(e => e.gicsSector).filter(Boolean))];
+
+  const clearAllFilters = () => {
+    setSelectedEventTypes([]);
+    setSelectedCompanies([]);
+    setSelectedTickerSymbols([]);
+    setSelectedGicsSectors([]);
+  };
 
   const handleViewDetails = (eventCard: any) => {
     // Find the original event from our events array using the eventCard id
@@ -238,37 +264,117 @@ const Events: React.FC = () => {
                     <Button variant="terminal">
                       <Filter className="mr-2 h-4 w-4" />
                       Filters
+                      {(selectedEventTypes.length + selectedCompanies.length + selectedTickerSymbols.length + selectedGicsSectors.length) > 0 && (
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          {selectedEventTypes.length + selectedCompanies.length + selectedTickerSymbols.length + selectedGicsSectors.length}
+                        </Badge>
+                      )}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-56 bg-surface-primary border border-border-default p-4">
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-medium text-text-primary">Event Status</h4>
-                      <div className="space-y-2">
-                        <Button
-                          variant={eventFilter === 'all' ? 'default' : 'ghost'}
-                          size="sm"
-                          className="w-full justify-start"
-                          onClick={() => setEventFilter('all')}
-                        >
-                          All Events
-                        </Button>
-                        <Button
-                          variant={eventFilter === 'upcoming' ? 'default' : 'ghost'}
-                          size="sm"
-                          className="w-full justify-start"
-                          onClick={() => setEventFilter('upcoming')}
-                        >
-                          Upcoming Events
-                        </Button>
-                        <Button
-                          variant={eventFilter === 'past' ? 'default' : 'ghost'}
-                          size="sm"
-                          className="w-full justify-start"
-                          onClick={() => setEventFilter('past')}
-                        >
-                          Past Events
+                  <PopoverContent className="w-80 bg-surface-primary border border-border-default p-4 max-h-96 overflow-y-auto">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium text-text-primary">Advanced Filters</h4>
+                        <Button variant="ghost" size="sm" onClick={clearAllFilters}>
+                          Clear All
                         </Button>
                       </div>
+
+                      {/* Event Type Filter */}
+                      <div className="space-y-2">
+                        <h5 className="text-xs font-medium text-text-secondary">Event Type</h5>
+                        {uniqueEventTypes.map(type => (
+                          <div key={type} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`type-${type}`}
+                              checked={selectedEventTypes.includes(type)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedEventTypes([...selectedEventTypes, type]);
+                                } else {
+                                  setSelectedEventTypes(selectedEventTypes.filter(t => t !== type));
+                                }
+                              }}
+                            />
+                            <label htmlFor={`type-${type}`} className="text-xs text-text-primary">
+                              {type.replace('_', ' ')}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Company Filter */}
+                      <div className="space-y-2">
+                        <h5 className="text-xs font-medium text-text-secondary">Company</h5>
+                        {uniqueCompanies.map(company => (
+                          <div key={company} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`company-${company}`}
+                              checked={selectedCompanies.includes(company)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedCompanies([...selectedCompanies, company]);
+                                } else {
+                                  setSelectedCompanies(selectedCompanies.filter(c => c !== company));
+                                }
+                              }}
+                            />
+                            <label htmlFor={`company-${company}`} className="text-xs text-text-primary">
+                              {company}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Ticker Symbol Filter */}
+                      {uniqueTickerSymbols.length > 0 && (
+                        <div className="space-y-2">
+                          <h5 className="text-xs font-medium text-text-secondary">Ticker Symbol</h5>
+                          {uniqueTickerSymbols.map(ticker => (
+                            <div key={ticker} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`ticker-${ticker}`}
+                                checked={selectedTickerSymbols.includes(ticker)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedTickerSymbols([...selectedTickerSymbols, ticker]);
+                                  } else {
+                                    setSelectedTickerSymbols(selectedTickerSymbols.filter(t => t !== ticker));
+                                  }
+                                }}
+                              />
+                              <label htmlFor={`ticker-${ticker}`} className="text-xs text-text-primary">
+                                {ticker}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* GICS Sector Filter */}
+                      {uniqueGicsSectors.length > 0 && (
+                        <div className="space-y-2">
+                          <h5 className="text-xs font-medium text-text-secondary">GICS Sector</h5>
+                          {uniqueGicsSectors.map(sector => (
+                            <div key={sector} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`gics-${sector}`}
+                                checked={selectedGicsSectors.includes(sector)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedGicsSectors([...selectedGicsSectors, sector]);
+                                  } else {
+                                    setSelectedGicsSectors(selectedGicsSectors.filter(s => s !== sector));
+                                  }
+                                }}
+                              />
+                              <label htmlFor={`gics-${sector}`} className="text-xs text-text-primary">
+                                {sector}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </PopoverContent>
                 </Popover>
