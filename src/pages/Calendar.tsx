@@ -3,8 +3,9 @@ import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight, Eye, EyeOff, Clock, MapPin, Building2, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -51,6 +52,12 @@ const CalendarPage: React.FC = () => {
   const [showLegend, setShowLegend] = useState(false);
   const [showOnlyRSVP, setShowOnlyRSVP] = useState(true);
   const [isRSVPing, setIsRSVPing] = useState(false);
+  const [companySortMode, setCompanySortMode] = useState<'events' | 'alpha'>('events');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [showCompaniesWithEventsOnly, setShowCompaniesWithEventsOnly] = useState(false);
+  const [selectedGicsSector, setSelectedGicsSector] = useState<string | null>(null);
+  const [selectedGicsSubSector, setSelectedGicsSubSector] = useState<string | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const { profile, user } = useAuth();
   const { toast } = useToast();
 
@@ -192,68 +199,72 @@ const CalendarPage: React.FC = () => {
 
   const getWeeksInMonth = () => {
     if (isWeekView) {
-      const start = startOfWeek(currentMonth, { weekStartsOn: 1 }); // Start week on Monday
+      const start = startOfWeek(currentMonth, { weekStartsOn: 1 });
       return [{
         start,
-        days: Array.from({ length: 5 }, (_, i) => addDays(start, i))
+        days: Array.from({ length: 7 }, (_, i) => addDays(start, i))
       }];
     }
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
-    const firstWeekStart = startOfWeek(monthStart, { weekStartsOn: 1 }); // Start week on Monday
-    const lastWeekEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
-    
-    const weeks = [];
+    const firstWeekStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+    let weeks = [];
     let currentWeekStart = firstWeekStart;
-    
-    while (currentWeekStart <= lastWeekEnd) {
+
+    // Try to fit in 4 weeks if possible
+    for (let i = 0; i < 4; i++) {
       weeks.push({
         start: currentWeekStart,
-        days: Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i))
+        days: Array.from({ length: 7 }, (_, d) => addDays(currentWeekStart, d))
       });
       currentWeekStart = addDays(currentWeekStart, 7);
     }
-    
+    // If the last day of the 4th week covers the month end, return 4 weeks
+    const lastDayOfFourthWeek = addDays(firstWeekStart, 27);
+    if (lastDayOfFourthWeek >= monthEnd) {
+      return weeks;
+    }
+    // Otherwise, add more weeks as needed
+    while (currentWeekStart <= endOfWeek(monthEnd, { weekStartsOn: 1 })) {
+      weeks.push({
+        start: currentWeekStart,
+        days: Array.from({ length: 7 }, (_, d) => addDays(currentWeekStart, d))
+      });
+      currentWeekStart = addDays(currentWeekStart, 7);
+    }
     return weeks;
   };
 
   const getEventsForCompanyAndDay = (company: Company, day: Date) => {
     const companyEvents = events.filter(event => {
       if (!isSameDay(new Date(event.startDate), day)) return false;
-      
+
       // Match by companyID if it exists
       if (event.companyID && event.companyID === company.companyID) {
         return true;
       }
-      
-      // Match by hostCompany name (case insensitive, partial match)
+
+      // Match by hostCompany name (case insensitive, exact match)
       if (event.hostCompany && company.companyName) {
         const eventHost = event.hostCompany.toLowerCase();
         const companyName = company.companyName.toLowerCase();
-        
-        // Check if company name is contained in host company or vice versa
-        if (eventHost.includes(companyName) || companyName.includes(eventHost)) {
+        if (eventHost === companyName) {
           return true;
         }
-        
-        // Also check ticker symbol against host company
-        if (company.tickerSymbol && eventHost.includes(company.tickerSymbol.toLowerCase())) {
+        // Also check ticker symbol against host company (exact match)
+        if (company.tickerSymbol && eventHost === company.tickerSymbol.toLowerCase()) {
           return true;
         }
       }
-      
+
+      // Optionally, match by event.tickerSymbol if available
+      if (event.tickerSymbol && company.tickerSymbol && event.tickerSymbol.toLowerCase() === company.tickerSymbol.toLowerCase()) {
+        return true;
+      }
+
       return false;
     });
-    
-    // Debug logging for first few companies
-    if (companies.indexOf(company) < 3) {
-      console.log(`Events for ${company.companyName} (${company.tickerSymbol}) on ${format(day, 'yyyy-MM-dd')}:`, companyEvents.length);
-      if (companyEvents.length > 0) {
-        console.log('Event details:', companyEvents.map(e => ({ name: e.eventName, host: e.hostCompany, companyID: e.companyID })));
-      }
-    }
-    
     return companyEvents;
   };
 
@@ -422,6 +433,41 @@ const CalendarPage: React.FC = () => {
     }
   };
 
+  const getCompanyEventCount = (company: Company) => {
+    return events.filter(event => {
+      // Match by companyID if it exists
+      if (event.companyID && event.companyID === company.companyID) return true;
+      // Match by hostCompany name (case insensitive, partial match)
+      if (event.hostCompany && company.companyName) {
+        const eventHost = event.hostCompany.toLowerCase();
+        const companyName = company.companyName.toLowerCase();
+        if (eventHost.includes(companyName) || companyName.includes(eventHost)) return true;
+        if (company.tickerSymbol && eventHost.includes(company.tickerSymbol.toLowerCase())) return true;
+      }
+      return false;
+    }).length;
+  };
+  const sortedCompanies = [...companies];
+  if (companySortMode === 'events') {
+    sortedCompanies.sort((a, b) => getCompanyEventCount(b) - getCompanyEventCount(a));
+  } else {
+    sortedCompanies.sort((a, b) => a.companyName.localeCompare(b.companyName));
+  }
+
+  let filteredCompanies = [...sortedCompanies];
+  if (showCompaniesWithEventsOnly) {
+    filteredCompanies = filteredCompanies.filter(c => getCompanyEventCount(c) > 0);
+  }
+  if (selectedGicsSector) {
+    filteredCompanies = filteredCompanies.filter(c => c.gicsSector === selectedGicsSector);
+  }
+  if (selectedGicsSubSector) {
+    filteredCompanies = filteredCompanies.filter(c => c.gicsSubCategory === selectedGicsSubSector);
+  }
+  if (selectedCompany) {
+    filteredCompanies = filteredCompanies.filter(c => c.companyID === selectedCompany);
+  }
+
   if (!canAccessCalendar) {
     return (
       <Layout currentPage="calendar">
@@ -496,6 +542,17 @@ const CalendarPage: React.FC = () => {
             </Button>
           </div>
 
+          <div className="flex items-center space-x-1 mr-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`text-xs h-6 px-2 ${companySortMode === 'events' ? 'text-gold bg-gold/10' : 'text-text-secondary hover:bg-surface-secondary'}`}
+              onClick={() => setCompanySortMode(companySortMode === 'events' ? 'alpha' : 'events')}
+            >
+              {companySortMode === 'events' ? 'Sort: Most Events' : 'Sort: A-Z'}
+            </Button>
+          </div>
+
           <div className="flex items-center space-x-1">
             <Button 
               variant="ghost" 
@@ -506,10 +563,58 @@ const CalendarPage: React.FC = () => {
               {showLegend ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
               Event Category
             </Button>
-            <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
+            <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2" onClick={() => setFilterOpen(!filterOpen)}>
               <Filter className="h-3 w-3 mr-1" />
               Filter
             </Button>
+            <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+              <PopoverTrigger asChild>
+                <span></span>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-4 space-y-3">
+                <div>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={showCompaniesWithEventsOnly} onChange={e => setShowCompaniesWithEventsOnly(e.target.checked)} />
+                    Hide companies with no events
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1">GICS Sector</label>
+                  <select className="w-full text-xs p-1 border border-border-default" value={selectedGicsSector || ''} onChange={e => { setSelectedGicsSector(e.target.value || null); setSelectedGicsSubSector(null); setSelectedCompany(null); }}>
+                    <option value="">All</option>
+                    {[...new Set(companies.map(c => c.gicsSector).filter(Boolean))].sort().map(sector => (
+                      <option key={sector} value={sector}>{sector}</option>
+                    ))}
+                  </select>
+                </div>
+                {selectedGicsSector && (
+                  <div>
+                    <label className="block text-xs mb-1">GICS Sub-Sector</label>
+                    <select className="w-full text-xs p-1 border border-border-default" value={selectedGicsSubSector || ''} onChange={e => { setSelectedGicsSubSector(e.target.value || null); setSelectedCompany(null); }}>
+                      <option value="">All</option>
+                      {[...new Set(companies.filter(c => c.gicsSector === selectedGicsSector).map(c => c.gicsSubCategory).filter(Boolean))].sort().map(sub => (
+                        <option key={sub} value={sub}>{sub}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {(selectedGicsSector || selectedGicsSubSector) && (
+                  <div>
+                    <label className="block text-xs mb-1">Company</label>
+                    <select className="w-full text-xs p-1 border border-border-default" value={selectedCompany || ''} onChange={e => setSelectedCompany(e.target.value || null)}>
+                      <option value="">All</option>
+                      {companies.filter(c => (!selectedGicsSector || c.gicsSector === selectedGicsSector) && (!selectedGicsSubSector || c.gicsSubCategory === selectedGicsSubSector)).sort((a, b) => a.companyName.localeCompare(b.companyName)).map(c => (
+                        <option key={c.companyID} value={c.companyID}>{c.companyName}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-2">
+                  <Button size="sm" className="flex-1" onClick={() => { setShowCompaniesWithEventsOnly(false); setSelectedGicsSector(null); setSelectedGicsSubSector(null); setSelectedCompany(null); }}>Reset</Button>
+                  <Button size="sm" className="flex-1" variant="outline" onClick={() => setFilterOpen(false)}>Close</Button>
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
               <Download className="h-3 w-3 mr-1" />
               Export
@@ -564,21 +669,21 @@ const CalendarPage: React.FC = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <div className="min-w-[800px]">
+                <div className="min-w-[900px] max-w-full">
                   {/* Header Row */}
-                  <div className="grid border-b border-border-default" style={{ gridTemplateColumns: '120px repeat(auto-fit, minmax(100px, 1fr))' }}>
-                    <div className="p-1 font-bold text-gold border-r border-border-default bg-surface-secondary text-xs">
-                      Company
+                  <div className="grid border-b-2 border-gold/30" style={{ gridTemplateColumns: '100px repeat(auto-fit, minmax(80px, 1fr))' }}>
+                    <div className="px-2 py-3 font-bold text-gold border-r-2 border-gold/30 bg-gradient-to-r from-surface-secondary to-surface-secondary/70 text-xs shadow-sm">
+                      <div className="text-center">Company</div>
                     </div>
                     {getWeeksInMonth().map((week, weekIndex) => (
-                      <div key={weekIndex} className="grid grid-cols-5 border-r border-border-default">
-                        <div className="col-span-5 p-1 text-center text-xs font-bold text-gold bg-surface-secondary border-b border-border-default">
+                      <div key={weekIndex} className="grid grid-cols-7 border-r-2 border-gold/30 bg-gradient-to-b from-surface-secondary to-surface-secondary/70 shadow-sm">
+                        <div className="col-span-7 px-1 py-2 text-center text-xs font-bold text-gold border-b border-border-default bg-gradient-to-r from-gold/10 to-gold/5">
                           Week {getISOWeek(week.start)}
                         </div>
-                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day, dayIndex) => (
-                          <div key={day} className="p-1 text-center text-xs font-bold text-gold bg-surface-secondary border-r last:border-r-0 border-border-default">
-                            <div>{day}</div>
-                            <div className="text-text-muted text-xs">
+                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, dayIndex) => (
+                          <div key={day} className="px-1 py-1 text-center text-xs font-medium text-gold border-r last:border-r-0 border-border-default/50">
+                            <div className="font-semibold">{day}</div>
+                            <div className="text-text-muted text-xs leading-tight">
                               {format(week.days[dayIndex], 'd')}
                             </div>
                           </div>
@@ -588,16 +693,19 @@ const CalendarPage: React.FC = () => {
                   </div>
 
                   {/* Company Rows */}
-                  {companies.map((company) => (
-                    <div key={company.companyID} className="grid border-b border-border-default hover:bg-surface-secondary/30" style={{ gridTemplateColumns: '120px repeat(auto-fit, minmax(100px, 1fr))' }}>
-                       <div className="p-1 border-r border-border-default font-medium text-text-primary bg-surface-primary">
-                         <div className="truncate text-xs pr-1" title={`${company.tickerSymbol} - ${company.companyName}`}>
+                  {filteredCompanies.map((company, companyIndex) => (
+                    <div key={company.companyID} className={`grid border-b border-border-default/50 hover:bg-surface-secondary/20 transition-colors ${companyIndex % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-primary/50'}`} style={{ gridTemplateColumns: '100px repeat(auto-fit, minmax(80px, 1fr))' }}>
+                       <div className="px-2 py-2 border-r-2 border-gold/30 font-medium text-text-primary bg-gradient-to-r from-surface-secondary/30 to-surface-secondary/10 shadow-sm">
+                         <div className="text-xs leading-tight font-semibold text-gold" title={`${company.tickerSymbol} - ${company.companyName}`}>
                            {company.tickerSymbol}
+                         </div>
+                         <div className="text-xs text-text-muted truncate leading-tight" title={company.companyName}>
+                           {company.companyName?.length > 12 ? company.companyName.substring(0, 12) + '...' : company.companyName}
                          </div>
                        </div>
                       
                       {getWeeksInMonth().map((week, weekIndex) => (
-                        <div key={weekIndex} className="grid grid-cols-5 border-r border-border-default">
+                        <div key={weekIndex} className="grid grid-cols-7 border-r-2 border-gold/30">
                           {week.days.map((day, dayIndex) => {
                             const dayEvents = getEventsForCompanyAndDay(company, day);
                             const isCurrentMonth = isSameMonth(day, currentMonth);
@@ -607,109 +715,33 @@ const CalendarPage: React.FC = () => {
                               <div
                                 key={dayIndex}
                                 className={`
-                                  min-h-[40px] p-0.5 border-r last:border-r-0 border-border-default relative
-                                  transition-all duration-200 hover:bg-surface-secondary/50 cursor-pointer
-                                  ${!isCurrentMonth ? 'bg-surface-secondary/20' : 'bg-surface-primary'}
-                                  ${isDayToday ? 'bg-gold/10' : ''}
+                                  min-h-[45px] p-1 border-r last:border-r-0 border-border-default/30 relative
+                                  transition-all duration-200 hover:bg-surface-secondary/40 cursor-pointer
+                                  ${!isCurrentMonth ? 'bg-surface-secondary/10' : ''}
+                                  ${isDayToday ? 'bg-gradient-to-br from-gold/20 to-gold/10 border-gold/50' : ''}
                                 `}
                                 onClick={() => setSelectedDate(day)}
                               >
                                 {dayEvents.length > 0 && (
-                                   <div className="space-y-0.5">
-                                      {dayEvents.slice(0, 2).map((event) => {
-                                        const rsvpStatus = getRSVPStatus(event.eventID);
-                                        const isEventInPast = isEventPast(event);
-                                        return (
-                                          <div key={event.eventID} className="group relative">
-                                            <DropdownMenu>
-                                               <DropdownMenuTrigger asChild>
-                                                 <Badge
-                                                   variant="secondary"
-                                                   className={`
-                                                     text-xs p-0.5 w-full justify-start truncate cursor-pointer hover:opacity-80 transition-opacity relative
-                                                     ${getEventTypeColor(event.eventType)}
-                                                     ${rsvpStatus === 'ACCEPTED' ? 'ring-1 ring-success' : ''}
-                                                     ${rsvpStatus === 'DECLINED' ? 'ring-1 ring-error' : ''}
-                                                     ${rsvpStatus === 'TENTATIVE' ? 'ring-1 ring-warning' : ''}
-                                                   `}
-                                                   title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}${rsvpStatus ? ` (${rsvpStatus})` : ''} - Right click for options, left click for details`}
-                                                   onClick={(e) => {
-                                                     e.stopPropagation();
-                                                     handleEventClick(event);
-                                                   }}
-                                                   onContextMenu={(e) => {
-                                                     e.preventDefault();
-                                                   }}
-                                                 >
-                                                   <span className="truncate">
-                                                     {event.eventName.length > 6 ? event.eventName.substring(0, 6) + '...' : event.eventName}
-                                                   </span>
-                                                   {rsvpStatus && (
-                                                     <span className="ml-1 text-xs">
-                                                       {rsvpStatus === 'ACCEPTED' ? '✓' : rsvpStatus === 'DECLINED' ? '✗' : '?'}
-                                                     </span>
-                                                   )}
-                                                 </Badge>
-                                               </DropdownMenuTrigger>
-                                              {!isEventInPast && (
-                                                <DropdownMenuContent 
-                                                  align="start" 
-                                                  className="bg-surface-primary border border-border-default z-50 min-w-[120px]"
-                                                  onClick={(e) => e.stopPropagation()}
-                                                >
-                                                  <DropdownMenuItem 
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      handleQuickRSVP(event.eventID, 'ACCEPTED');
-                                                    }}
-                                                    className="text-success hover:bg-surface-secondary text-xs"
-                                                  >
-                                                    ✓ Accept
-                                                  </DropdownMenuItem>
-                                                  <DropdownMenuItem 
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      handleQuickRSVP(event.eventID, 'DECLINED');
-                                                    }}
-                                                    className="text-error hover:bg-surface-secondary text-xs"
-                                                  >
-                                                    ✗ Decline
-                                                  </DropdownMenuItem>
-                                                  <DropdownMenuItem 
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      handleQuickRSVP(event.eventID, 'TENTATIVE');
-                                                    }}
-                                                    className="text-warning hover:bg-surface-secondary text-xs"
-                                                  >
-                                                    ? Tentative
-                                                  </DropdownMenuItem>
-                                                  <DropdownMenuItem 
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      handleEventClick(event);
-                                                    }}
-                                                    className="text-text-secondary hover:bg-surface-secondary text-xs border-t border-border-default"
-                                                  >
-                                                    View Details
-                                                  </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                              )}
-                                            </DropdownMenu>
-                                          </div>
-                                        );
-                                      })}
-                                     {dayEvents.length > 2 && (
-                                       <div 
-                                         className="text-xs text-text-muted text-center cursor-pointer hover:text-gold transition-colors"
-                                         onClick={(e) => {
-                                           e.stopPropagation();
-                                           setSelectedDate(day);
-                                         }}
-                                       >
-                                         +{dayEvents.length - 2}
-                                      </div>
-                                    )}
+                                  <div className={`space-y-0.5 ${dayEvents.length > 2 ? 'max-h-[24px] overflow-y-auto' : ''} overflow-x-hidden`}>
+                                    {dayEvents.map((event) => {
+                                      const rsvpStatus = getRSVPStatus(event.eventID);
+                                      return (
+                                        <Badge
+                                          key={event.eventID}
+                                          variant="secondary"
+                                          className={`w-full max-w-full truncate whitespace-nowrap cursor-pointer hover:opacity-90 transition-all text-[8px] leading-tight flex items-center gap-1 ${getEventTypeColor(event.eventType)} ${rsvpStatus === 'ACCEPTED' ? 'ring-1 ring-success shadow-sm' : ''} ${rsvpStatus === 'DECLINED' ? 'ring-1 ring-error shadow-sm' : ''} ${rsvpStatus === 'TENTATIVE' ? 'ring-1 ring-warning shadow-sm' : ''} hover:shadow-md hover:scale-[1.02]`}
+                                          title={`${event.eventName} – ${format(new Date(event.startDate), 'h:mm a')}${rsvpStatus ? ` (${rsvpStatus})` : ''} – Click for details`}
+                                          onClick={e => { e.stopPropagation(); handleEventClick(event); }}
+                                        >
+                                          <span className="truncate max-w-full whitespace-nowrap">{event.eventName}</span>
+                                          <span className="ml-1 text-[8px] text-gold whitespace-nowrap">– {format(new Date(event.startDate), 'h:mm a')}</span>
+                                          {rsvpStatus && (
+                                            <span className="ml-1 text-[8px] font-bold whitespace-nowrap">{rsvpStatus === 'ACCEPTED' ? '✓' : rsvpStatus === 'DECLINED' ? '✗' : '?'}</span>
+                                          )}
+                                        </Badge>
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
@@ -784,10 +816,21 @@ const CalendarPage: React.FC = () => {
             
             {selectedEvent && (
               <div className="space-y-6">
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   <Badge className={`${getEventTypeColor(selectedEvent.eventType)}`}>
                     {selectedEvent.eventType.replace('_', ' ')}
                   </Badge>
+                  {/* RSVP Status Tag */}
+                  {(() => {
+                    const rsvpStatus = getRSVPStatus(selectedEvent.eventID);
+                    if (rsvpStatus === 'ACCEPTED')
+                      return <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-success/20 text-success border border-success/30">Accepted</span>;
+                    if (rsvpStatus === 'DECLINED')
+                      return <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-error/20 text-error border border-error/30">Declined</span>;
+                    if (rsvpStatus === 'TENTATIVE')
+                      return <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-warning/20 text-warning border border-warning/30">Tentative</span>;
+                    return <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-muted/20 text-muted-foreground border border-muted/30">Pending</span>;
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -882,6 +925,17 @@ const CalendarPage: React.FC = () => {
                     </DropdownMenu>
                   )}
                 </div>
+
+                {/* Close Button */}
+                <DialogFooter className="pt-4">
+                  <Button 
+                    variant="secondary" 
+                    onClick={() => setEventDetailsOpen(false)}
+                    className="w-full"
+                  >
+                    Close
+                  </Button>
+                </DialogFooter>
               </div>
             )}
           </DialogContent>
