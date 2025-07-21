@@ -139,11 +139,20 @@ const CalendarPage: React.FC = () => {
           const rsvpEventIds = userRSVPsData.map(rsvp => rsvp.eventID);
           const rsvpEvents = fetchedEvents.filter(event => rsvpEventIds.includes(event.eventID));
           
-          // Get companies from these RSVP'd events
-          const rsvpCompanyIds = rsvpEvents.map(event => event.companyID).filter(Boolean);
-          filteredCompanies = allCompanies.filter(company => 
-            rsvpCompanyIds.includes(company.companyID)
-          );
+          // Get companies from these RSVP'd events by matching host company names
+          const rsvpCompanyNames = rsvpEvents.map(event => event.hostCompany).filter(Boolean);
+          filteredCompanies = allCompanies.filter(company => {
+            if (!company.companyName) return false;
+            
+            return rsvpCompanyNames.some(hostName => {
+              const eventHost = hostName.toLowerCase();
+              const companyName = company.companyName.toLowerCase();
+              
+              // Check if company name is contained in host company or vice versa
+              return eventHost.includes(companyName) || companyName.includes(eventHost) ||
+                     (company.tickerSymbol && eventHost.includes(company.tickerSymbol.toLowerCase()));
+            });
+          });
         }
       } else {
         // Show all companies when "All Events" is selected
@@ -154,6 +163,14 @@ const CalendarPage: React.FC = () => {
       setCompanies(filteredCompanies);
       setSubscriptions(userSubscriptions);
       setUserRSVPs(userRSVPsData);
+
+      // Debug logs
+      console.log('Fetched events:', fetchedEvents.length);
+      console.log('Filtered companies:', filteredCompanies.length);
+      console.log('User RSVPs:', userRSVPsData.length);
+      console.log('Show only RSVP:', showOnlyRSVP);
+      console.log('Sample events:', fetchedEvents.slice(0, 3));
+      console.log('Sample companies:', filteredCompanies.slice(0, 3));
     } catch (error) {
       console.error('Error fetching calendar data:', error);
     } finally {
@@ -202,12 +219,42 @@ const CalendarPage: React.FC = () => {
   };
 
   const getEventsForCompanyAndDay = (company: Company, day: Date) => {
-    return events.filter(event => 
-      isSameDay(new Date(event.startDate), day) && 
-      (event.companyID === company.companyID || 
-       event.hostCompany?.toLowerCase().includes(company.companyName.toLowerCase()) ||
-       company.companyName.toLowerCase().includes(event.hostCompany?.toLowerCase() || ''))
-    );
+    const companyEvents = events.filter(event => {
+      if (!isSameDay(new Date(event.startDate), day)) return false;
+      
+      // Match by companyID if it exists
+      if (event.companyID && event.companyID === company.companyID) {
+        return true;
+      }
+      
+      // Match by hostCompany name (case insensitive, partial match)
+      if (event.hostCompany && company.companyName) {
+        const eventHost = event.hostCompany.toLowerCase();
+        const companyName = company.companyName.toLowerCase();
+        
+        // Check if company name is contained in host company or vice versa
+        if (eventHost.includes(companyName) || companyName.includes(eventHost)) {
+          return true;
+        }
+        
+        // Also check ticker symbol against host company
+        if (company.tickerSymbol && eventHost.includes(company.tickerSymbol.toLowerCase())) {
+          return true;
+        }
+      }
+      
+      return false;
+    });
+    
+    // Debug logging for first few companies
+    if (companies.indexOf(company) < 3) {
+      console.log(`Events for ${company.companyName} (${company.tickerSymbol}) on ${format(day, 'yyyy-MM-dd')}:`, companyEvents.length);
+      if (companyEvents.length > 0) {
+        console.log('Event details:', companyEvents.map(e => ({ name: e.eventName, host: e.hostCompany, companyID: e.companyID })));
+      }
+    }
+    
+    return companyEvents;
   };
 
   const getEventTypeColor = (eventType: string) => {
