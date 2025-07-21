@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import CreateEventDialog from '@/components/CreateEventDialog';
+import { useNavigate } from 'react-router-dom';
 
 interface Event {
   eventID: string;
@@ -33,7 +34,7 @@ const Events: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [eventFilter, setEventFilter] = useState<'all' | 'upcoming' | 'past'>('all');
+  const [eventFilter, setEventFilter] = useState<'all' | 'upcoming' | 'past'>('upcoming');
   const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [selectedTickerSymbols, setSelectedTickerSymbols] = useState<string[]>([]);
@@ -42,8 +43,10 @@ const Events: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
   const [isRSVPing, setIsRSVPing] = useState(false);
+  const [selectedEventIDs, setSelectedEventIDs] = useState<string[]>([]);
   const { profile, user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchEvents();
@@ -206,6 +209,39 @@ const Events: React.FC = () => {
     }
   };
 
+  const handleBulkRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
+    if (!user || selectedEventIDs.length === 0) return;
+    setIsRSVPing(true);
+    try {
+      for (const eventID of selectedEventIDs) {
+        // Check if RSVP exists
+        const { data: existingRSVP } = await supabase
+          .from('rsvps')
+          .select('rsvpID')
+          .eq('eventID', eventID)
+          .eq('userID', user.id)
+          .single();
+        if (existingRSVP) {
+          await supabase
+            .from('rsvps')
+            .update({ status, updatedAt: new Date().toISOString() })
+            .eq('rsvpID', existingRSVP.rsvpID);
+        } else {
+          await supabase
+            .from('rsvps')
+            .insert([{ eventID, userID: user.id, status }]);
+        }
+      }
+      toast({ title: 'Bulk RSVP Updated', description: `Set ${status.toLowerCase()} for ${selectedEventIDs.length} events.` });
+      setSelectedEventIDs([]);
+      fetchEvents();
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to update RSVP for some events.', variant: 'destructive' });
+    } finally {
+      setIsRSVPing(false);
+    }
+  };
+
   const isEventPast = (eventDate: string) => {
     const event = new Date(eventDate);
     const now = new Date();
@@ -213,6 +249,7 @@ const Events: React.FC = () => {
   };
 
   const canCreateEvents = profile?.role === 'IR_ADMIN';
+  const canBulkRSVP = profile?.role === 'ANALYST_MANAGER' || profile?.role === 'INVESTMENT_ANALYST';
 
   const getEventStatus = (startDate: string, endDate?: string): 'upcoming' | 'ongoing' | 'completed' => {
     const now = new Date();
@@ -239,7 +276,7 @@ const Events: React.FC = () => {
               Manage and track all investor relations events
             </p>
           </div>
-          <Button variant="ghost">
+          <Button variant="ghost" onClick={() => navigate('/dashboard')}>
             <TrendingUp className="mr-2 h-4 w-4" />
             Dashboard
           </Button>
@@ -389,13 +426,6 @@ const Events: React.FC = () => {
               {/* Quick Filter Toggle */}
               <div className="flex gap-2">
                 <Button
-                  variant={eventFilter === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setEventFilter('all')}
-                >
-                  All ({events.length})
-                </Button>
-                <Button
                   variant={eventFilter === 'upcoming' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setEventFilter('upcoming')}
@@ -408,6 +438,13 @@ const Events: React.FC = () => {
                   onClick={() => setEventFilter('past')}
                 >
                   Past ({events.filter(e => new Date(e.startDate) < new Date()).length})
+                </Button>
+                <Button
+                  variant={eventFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setEventFilter('all')}
+                >
+                  All ({events.length})
                 </Button>
               </div>
             </div>
@@ -434,30 +471,56 @@ const Events: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredEvents.map((event) => (
-              <EventCard 
-                key={event.eventID} 
-                event={{
-                  id: event.eventID,
-                  title: event.eventName,
-                  type: event.eventType,
-                  company: event.hostCompany || 'TBD',
-                  date: new Date(event.startDate).toLocaleDateString(),
-                  time: new Date(event.startDate).toLocaleTimeString([], { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  }),
-                  location: event.location || 'TBD',
-                  attendees: 0,
-                  status: getEventStatus(event.startDate, event.endDate),
-                  rsvpStatus: event.rsvpStatus?.toLowerCase() as 'accepted' | 'declined' | 'tentative' | 'pending' | undefined,
-                  description: event.description,
-                  startDate: event.startDate,
-                  endDate: event.endDate
-                }}
-                onViewDetails={handleViewDetails}
-                onRSVPUpdate={handleRSVPUpdate}
-              />
+              <div key={event.eventID} className="relative">
+                {canBulkRSVP && (
+                  <input
+                    type="checkbox"
+                    className="absolute left-2 top-2 z-10 h-4 w-4"
+                    checked={selectedEventIDs.includes(event.eventID)}
+                    disabled={isEventPast(event.startDate)}
+                    onChange={e => {
+                      if (e.target.checked) {
+                        setSelectedEventIDs([...selectedEventIDs, event.eventID]);
+                      } else {
+                        setSelectedEventIDs(selectedEventIDs.filter(id => id !== event.eventID));
+                      }
+                    }}
+                  />
+                )}
+                <EventCard 
+                  event={{
+                    id: event.eventID,
+                    title: event.eventName,
+                    type: event.eventType,
+                    company: event.hostCompany || 'TBD',
+                    date: new Date(event.startDate).toLocaleDateString(),
+                    time: new Date(event.startDate).toLocaleTimeString([], { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    }),
+                    location: event.location || 'TBD',
+                    attendees: 0,
+                    status: getEventStatus(event.startDate, event.endDate),
+                    rsvpStatus: event.rsvpStatus?.toLowerCase() as 'accepted' | 'declined' | 'tentative' | 'pending' | undefined,
+                    description: event.description,
+                    startDate: event.startDate,
+                    endDate: event.endDate
+                  }}
+                  onViewDetails={handleViewDetails}
+                  onRSVPUpdate={handleRSVPUpdate}
+                />
+              </div>
             ))}
+          </div>
+        )}
+
+        {canBulkRSVP && selectedEventIDs.length > 0 && (
+          <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-surface-primary border border-gold rounded-lg shadow-lg flex items-center gap-4 px-6 py-3">
+            <span className="text-xs text-gold font-semibold">Bulk RSVP for {selectedEventIDs.length} events:</span>
+            <Button size="sm" className="text-success border-success" variant="outline" onClick={() => handleBulkRSVP('ACCEPTED')}>Accept</Button>
+            <Button size="sm" className="text-error border-error" variant="outline" onClick={() => handleBulkRSVP('DECLINED')}>Decline</Button>
+            <Button size="sm" className="text-warning border-warning" variant="outline" onClick={() => handleBulkRSVP('TENTATIVE')}>Tentative</Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedEventIDs([])}>Cancel</Button>
           </div>
         )}
 
