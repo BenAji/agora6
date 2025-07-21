@@ -26,6 +26,7 @@ interface Event {
 interface Company {
   companyID: string;
   companyName: string;
+  tickerSymbol: string;
 }
 
 interface Subscription {
@@ -109,7 +110,7 @@ const CalendarPage: React.FC = () => {
       // Get companies from GICS database for all companies
       const allCompaniesPromise = supabase
         .from('gics_companies')
-        .select('companyID, companyName, gicsSector, gicsSubCategory')
+        .select('companyID, companyName, tickerSymbol, gicsSector, gicsSubCategory')
         .order('companyName');
 
       const [eventsResponse, subscriptionsResponse, rsvpsResponse, allCompaniesResponse] = await Promise.all([
@@ -563,11 +564,11 @@ const CalendarPage: React.FC = () => {
                   {/* Company Rows */}
                   {companies.map((company) => (
                     <div key={company.companyID} className="grid border-b border-border-default hover:bg-surface-secondary/30" style={{ gridTemplateColumns: '120px repeat(auto-fit, minmax(100px, 1fr))' }}>
-                      <div className="p-1 border-r border-border-default font-medium text-text-primary bg-surface-primary">
-                        <div className="truncate text-xs pr-1" title={company.companyName}>
-                          {company.companyName}
-                        </div>
-                      </div>
+                       <div className="p-1 border-r border-border-default font-medium text-text-primary bg-surface-primary">
+                         <div className="truncate text-xs pr-1" title={`${company.tickerSymbol} - ${company.companyName}`}>
+                           {company.tickerSymbol}
+                         </div>
+                       </div>
                       
                       {getWeeksInMonth().map((week, weekIndex) => (
                         <div key={weekIndex} className="grid grid-cols-5 border-r border-border-default">
