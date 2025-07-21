@@ -1,250 +1,145 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
-import DashboardStats from '@/components/DashboardStats';
-import EventCard from '@/components/EventCard';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { Plus, CalendarIcon, Clock, MapPin, Users, Building2 } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Legend } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import CreateEventDialog from '@/components/CreateEventDialog';
 
-interface Event {
-  eventID: string;
-  eventName: string;
-  eventType: string;
-  hostCompany: string;
-  startDate: string;
-  endDate: string;
-  location: string;
-  description: string;
-}
+const COLORS = ['#22c55e', '#ef4444', '#eab308', '#64748b'];
+const RSVP_LABELS = ['ACCEPTED', 'DECLINED', 'TENTATIVE', 'PENDING'];
 
 const Dashboard: React.FC = () => {
-  const [events, setEvents] = useState<Event[]>([]);
+  const [eventCount, setEventCount] = useState(0);
+  const [rsvpCount, setRsvpCount] = useState(0);
+  const [rsvpStatusData, setRsvpStatusData] = useState<any[]>([]);
+  const [eventsPerCompany, setEventsPerCompany] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createEventOpen, setCreateEventOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const [eventDetailsOpen, setEventDetailsOpen] = useState(false);
-  const { profile } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
-    fetchEvents();
-  }, []);
+    const fetchData = async () => {
+      setLoading(true);
+      // Fetch events
+      const { data: events, error: eventsError } = await supabase.from('events').select('eventID, hostCompany');
+      // Fetch RSVPs
+      const { data: rsvps, error: rsvpsError } = await supabase.from('rsvps').select('status');
+      // Fetch companies
+      const { data: companies, error: companiesError } = await supabase.from('gics_companies').select('companyName');
 
-  const fetchEvents = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .order('startDate', { ascending: true })
-        .limit(6);
+      if (eventsError || rsvpsError || companiesError) {
+        setLoading(false);
+        return;
+      }
 
-      if (error) throw error;
-      setEvents(data || []);
-    } catch (error) {
-      console.error('Error fetching events:', error);
-    } finally {
+      setEventCount(events.length);
+      setRsvpCount(rsvps.length);
+
+      // RSVP status breakdown
+      const rsvpStatusCounts = RSVP_LABELS.map(label => ({
+        name: label.charAt(0) + label.slice(1).toLowerCase(),
+        value: rsvps.filter(r => r.status === label).length
+      }));
+      setRsvpStatusData(rsvpStatusCounts);
+
+      // Events per company
+      const companyEventMap: Record<string, number> = {};
+      events.forEach(e => {
+        if (e.hostCompany) {
+          companyEventMap[e.hostCompany] = (companyEventMap[e.hostCompany] || 0) + 1;
+        }
+      });
+      const eventsPerCompanyArr = Object.entries(companyEventMap).map(([name, value]) => ({ name, value }));
+      setEventsPerCompany(eventsPerCompanyArr);
+
       setLoading(false);
-    }
-  };
-
-  const canCreateEvents = profile?.role === 'IR_ADMIN';
-
-  const handleViewDetails = (event: any) => {
-    const fullEvent = events.find(e => e.eventID === event.id);
-    if (fullEvent) {
-      setSelectedEvent(fullEvent);
-      setEventDetailsOpen(true);
-    }
-  };
-
-  const handleViewAllEvents = () => {
-    navigate('/events');
-  };
-
-  const getEventStatus = (startDate: string, endDate: string | null) => {
-    const now = new Date();
-    const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : start;
-    
-    if (now > end) return 'completed';
-    if (now >= start && now <= end) return 'ongoing';
-    return 'upcoming';
-  };
+    };
+    fetchData();
+  }, []);
 
   return (
     <Layout currentPage="dashboard">
-      <div className="p-8 space-y-8">
-        {/* Dashboard Header */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gold mb-2">Dashboard</h1>
-            <p className="text-text-secondary">
-              Real-time insights and analytics for your IR events
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Button variant="terminal" onClick={() => navigate('/calendar')}>
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              Calendar View
-            </Button>
-            {canCreateEvents && (
-              <Button onClick={() => setCreateEventOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Event
-              </Button>
-            )}
-          </div>
+      <div className="p-8 bg-background min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          <h1 className="text-3xl font-bold text-gold mb-8">Dashboard Analytics</h1>
+          {loading ? (
+            <div className="text-gold">Loading analytics...</div>
+          ) : (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <Card className="bg-surface-primary border-border-default">
+                  <CardHeader>
+                    <CardTitle className="text-gold">Total Events</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-text-primary">{eventCount}</div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-surface-primary border-border-default">
+                  <CardHeader>
+                    <CardTitle className="text-gold">Total RSVPs</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-text-primary">{rsvpCount}</div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-surface-primary border-border-default">
+                  <CardHeader>
+                    <CardTitle className="text-gold">Companies</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-text-primary">{eventsPerCompany.length}</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Charts */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <Card className="bg-surface-primary border-border-default">
+                  <CardHeader>
+                    <CardTitle className="text-gold">RSVP Status Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <PieChart>
+                        <Pie
+                          data={rsvpStatusData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          label
+                        >
+                          {rsvpStatusData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Legend />
+                        <RechartsTooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+                <Card className="bg-surface-primary border-border-default">
+                  <CardHeader>
+                    <CardTitle className="text-gold">Events per Company</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={eventsPerCompany} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                        <XAxis dataKey="name" stroke="#FFD700" tick={{ fill: '#FFD700', fontSize: 12 }} interval={0} angle={-20} textAnchor="end" height={60} />
+                        <YAxis stroke="#FFD700" tick={{ fill: '#FFD700', fontSize: 12 }} />
+                        <Bar dataKey="value" fill="#22c55e" />
+                        <RechartsTooltip />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
         </div>
-
-        {/* Stats */}
-        <DashboardStats />
-
-        {/* Recent Events */}
-        <Card variant="terminal">
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle className="text-gold">Recent Events</CardTitle>
-              <Button variant="ghost" size="sm" onClick={handleViewAllEvents}>
-                View All Events
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8">
-                <div className="text-text-secondary">Loading events...</div>
-              </div>
-            ) : events.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="text-text-secondary mb-4">No events found</div>
-                {canCreateEvents && (
-                  <Button onClick={() => setCreateEventOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Your First Event
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {events.map((event) => (
-                  <EventCard 
-                    key={event.eventID} 
-                    event={{
-                      id: event.eventID,
-                      title: event.eventName,
-                      type: event.eventType,
-                      company: event.hostCompany || 'TBD',
-                      date: new Date(event.startDate).toLocaleDateString(),
-                      time: new Date(event.startDate).toLocaleTimeString([], { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      }),
-                      location: event.location || 'TBD',
-                      attendees: 0,
-                      status: getEventStatus(event.startDate, event.endDate),
-                      rsvpStatus: 'pending' as const,
-                      startDate: event.startDate,
-                      endDate: event.endDate,
-                      description: event.description,
-                    }}
-                    onViewDetails={handleViewDetails}
-                  />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {canCreateEvents && (
-          <CreateEventDialog 
-            open={createEventOpen} 
-            onOpenChange={setCreateEventOpen}
-            onEventCreated={fetchEvents}
-          />
-        )}
-
-        {/* Event Details Dialog */}
-        <Dialog open={eventDetailsOpen} onOpenChange={setEventDetailsOpen}>
-          <DialogContent className="max-w-2xl bg-surface-primary border border-border-default">
-            <DialogHeader>
-              <DialogTitle className="text-gold text-xl">
-                {selectedEvent?.eventName}
-              </DialogTitle>
-            </DialogHeader>
-            
-            {selectedEvent && (
-              <div className="space-y-6">
-                <div className="flex gap-2">
-                  <Badge className="bg-chart-quaternary text-black">
-                    {selectedEvent.eventType}
-                  </Badge>
-                  <Badge className={`text-black ${
-                    getEventStatus(selectedEvent.startDate, selectedEvent.endDate) === 'completed' 
-                      ? 'bg-text-muted' 
-                      : getEventStatus(selectedEvent.startDate, selectedEvent.endDate) === 'ongoing'
-                      ? 'bg-success'
-                      : 'bg-chart-quaternary'
-                  }`}>
-                    {getEventStatus(selectedEvent.startDate, selectedEvent.endDate)}
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex items-center text-text-secondary">
-                    <Building2 className="mr-3 h-5 w-5 text-gold" />
-                    <div>
-                      <div className="text-sm font-medium">Company</div>
-                      <div>{selectedEvent.hostCompany || 'TBD'}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center text-text-secondary">
-                    <CalendarIcon className="mr-3 h-5 w-5 text-gold" />
-                    <div>
-                      <div className="text-sm font-medium">Date & Time</div>
-                      <div>{new Date(selectedEvent.startDate).toLocaleDateString()}</div>
-                      <div className="text-sm">{new Date(selectedEvent.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center text-text-secondary">
-                    <MapPin className="mr-3 h-5 w-5 text-gold" />
-                    <div>
-                      <div className="text-sm font-medium">Location</div>
-                      <div>{selectedEvent.location || 'TBD'}</div>
-                    </div>
-                  </div>
-
-                  {selectedEvent.endDate && (
-                    <div className="flex items-center text-text-secondary">
-                      <Clock className="mr-3 h-5 w-5 text-gold" />
-                      <div>
-                        <div className="text-sm font-medium">End Date</div>
-                        <div>{new Date(selectedEvent.endDate).toLocaleDateString()}</div>
-                        <div className="text-sm">{new Date(selectedEvent.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {selectedEvent.description && (
-                  <div>
-                    <div className="text-sm font-medium text-text-secondary mb-2">Description</div>
-                    <div className="text-text-primary bg-surface-secondary p-4 rounded-lg border border-border-default">
-                      {selectedEvent.description}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
       </div>
     </Layout>
   );

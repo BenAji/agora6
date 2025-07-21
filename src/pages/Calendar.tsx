@@ -54,7 +54,7 @@ const CalendarPage: React.FC = () => {
   const [isRSVPing, setIsRSVPing] = useState(false);
   const [companySortMode, setCompanySortMode] = useState<'events' | 'alpha'>('events');
   const [filterOpen, setFilterOpen] = useState(false);
-  const [showCompaniesWithEventsOnly, setShowCompaniesWithEventsOnly] = useState(false);
+  const [showCompaniesWithEventsOnly, setShowCompaniesWithEventsOnly] = useState(true);
   const [selectedGicsSector, setSelectedGicsSector] = useState<string | null>(null);
   const [selectedGicsSubSector, setSelectedGicsSubSector] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
