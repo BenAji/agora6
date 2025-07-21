@@ -130,45 +130,24 @@ const CalendarPage: React.FC = () => {
       const userRSVPsData = rsvpsResponse.data || [];
       const allCompanies = allCompaniesResponse.data || [];
       
-      // Filter companies based on subscriptions
+      // Filter companies based on view mode
       let filteredCompanies: Company[] = [];
       
-      if (user && userSubscriptions.length > 0) {
-        // Get companies that match user's subscribed sectors/subsectors
-        filteredCompanies = allCompanies.filter(company => {
-          return userSubscriptions.some(sub => 
-            sub.gicsSector === company.gicsSector &&
-            (
-              // Either subscribed to the entire sector (no gicsSubCategory)
-              !sub.gicsSubCategory ||
-              // Or subscribed to the specific subsector that matches the company
-              sub.gicsSubCategory === company.gicsSubCategory
-            )
-          );
-        });
-        
-        // Additionally, get companies from events where user has RSVP'd
-        const userRSVPPromise = supabase
-          .from('rsvps')
-          .select('eventID')
-          .eq('userID', user.id)
-          .eq('status', 'ACCEPTED');
-          
-        const { data: userRSVPs } = await userRSVPPromise;
-        
-        if (userRSVPs && userRSVPs.length > 0) {
-          const rsvpEventIds = userRSVPs.map(rsvp => rsvp.eventID);
+      if (showOnlyRSVP) {
+        // Show only companies where user has RSVP'd to events
+        if (user) {
+          const rsvpEventIds = userRSVPsData.map(rsvp => rsvp.eventID);
           const rsvpEvents = fetchedEvents.filter(event => rsvpEventIds.includes(event.eventID));
           
           // Get companies from these RSVP'd events
           const rsvpCompanyIds = rsvpEvents.map(event => event.companyID).filter(Boolean);
-          const rsvpCompanies = allCompanies.filter(company => 
-            rsvpCompanyIds.includes(company.companyID) &&
-            !filteredCompanies.some(existing => existing.companyID === company.companyID)
+          filteredCompanies = allCompanies.filter(company => 
+            rsvpCompanyIds.includes(company.companyID)
           );
-          
-          filteredCompanies = [...filteredCompanies, ...rsvpCompanies];
         }
+      } else {
+        // Show all companies when "All Events" is selected
+        filteredCompanies = allCompanies;
       }
       
       setEvents(fetchedEvents);
