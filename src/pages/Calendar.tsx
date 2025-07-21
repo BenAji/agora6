@@ -622,28 +622,35 @@ const CalendarPage: React.FC = () => {
                                         return (
                                           <div key={event.eventID} className="group relative">
                                             <DropdownMenu>
-                                              <DropdownMenuTrigger asChild>
-                                                <Badge
-                                                  variant="secondary"
-                                                  className={`
-                                                    text-xs p-0.5 w-full justify-start truncate cursor-pointer hover:opacity-80 transition-opacity relative
-                                                    ${getEventTypeColor(event.eventType)}
-                                                    ${rsvpStatus === 'ACCEPTED' ? 'ring-1 ring-success' : ''}
-                                                    ${rsvpStatus === 'DECLINED' ? 'ring-1 ring-error' : ''}
-                                                    ${rsvpStatus === 'TENTATIVE' ? 'ring-1 ring-warning' : ''}
-                                                  `}
-                                                  title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}${rsvpStatus ? ` (${rsvpStatus})` : ''}`}
-                                                >
-                                                  <span className="truncate">
-                                                    {event.eventName.length > 6 ? event.eventName.substring(0, 6) + '...' : event.eventName}
-                                                  </span>
-                                                  {rsvpStatus && (
-                                                    <span className="ml-1 text-xs">
-                                                      {rsvpStatus === 'ACCEPTED' ? '✓' : rsvpStatus === 'DECLINED' ? '✗' : '?'}
-                                                    </span>
-                                                  )}
-                                                </Badge>
-                                              </DropdownMenuTrigger>
+                                               <DropdownMenuTrigger asChild>
+                                                 <Badge
+                                                   variant="secondary"
+                                                   className={`
+                                                     text-xs p-0.5 w-full justify-start truncate cursor-pointer hover:opacity-80 transition-opacity relative
+                                                     ${getEventTypeColor(event.eventType)}
+                                                     ${rsvpStatus === 'ACCEPTED' ? 'ring-1 ring-success' : ''}
+                                                     ${rsvpStatus === 'DECLINED' ? 'ring-1 ring-error' : ''}
+                                                     ${rsvpStatus === 'TENTATIVE' ? 'ring-1 ring-warning' : ''}
+                                                   `}
+                                                   title={`${event.eventName} - ${format(new Date(event.startDate), 'h:mm a')}${rsvpStatus ? ` (${rsvpStatus})` : ''} - Right click for options, left click for details`}
+                                                   onClick={(e) => {
+                                                     e.stopPropagation();
+                                                     handleEventClick(event);
+                                                   }}
+                                                   onContextMenu={(e) => {
+                                                     e.preventDefault();
+                                                   }}
+                                                 >
+                                                   <span className="truncate">
+                                                     {event.eventName.length > 6 ? event.eventName.substring(0, 6) + '...' : event.eventName}
+                                                   </span>
+                                                   {rsvpStatus && (
+                                                     <span className="ml-1 text-xs">
+                                                       {rsvpStatus === 'ACCEPTED' ? '✓' : rsvpStatus === 'DECLINED' ? '✗' : '?'}
+                                                     </span>
+                                                   )}
+                                                 </Badge>
+                                               </DropdownMenuTrigger>
                                               {!isEventInPast && (
                                                 <DropdownMenuContent 
                                                   align="start" 
