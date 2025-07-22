@@ -29,7 +29,7 @@ interface EventCardProps {
 }
 
 const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [isRSVPing, setIsRSVPing] = useState(false);
   const getStatusColor = (status: string) => {
@@ -51,7 +51,7 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
   };
 
   const handleRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
-    if (!user) {
+    if (!user || !profile) {
       toast({
         title: "Authentication Required",
         description: "Please log in to RSVP to events",
@@ -67,7 +67,7 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
         .from('rsvps')
         .select('*')
         .eq('eventID', event.id)
-        .eq('userID', user.id)
+        .eq('userID', profile.id)
         .single();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
@@ -91,7 +91,7 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
           .from('rsvps')
           .insert([{
             eventID: event.id,
-            userID: user.id,
+            userID: profile.id,
             status: status
           }]);
 

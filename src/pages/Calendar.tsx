@@ -28,6 +28,8 @@ interface Company {
   companyID: string;
   companyName: string;
   tickerSymbol: string;
+  gicsSector: string;
+  gicsSubCategory: string;
 }
 
 interface Subscription {
@@ -87,7 +89,7 @@ const CalendarPage: React.FC = () => {
         .order('startDate');
 
       // If showing only RSVP'd events and user is logged in, filter by RSVP status
-      if (showOnlyRSVP && user) {
+      if (showOnlyRSVP && user && profile) {
         eventsQuery = supabase
           .from('events')
           .select(`
@@ -97,22 +99,22 @@ const CalendarPage: React.FC = () => {
           `)
           .gte('startDate', monthStart.toISOString())
           .lte('startDate', monthEnd.toISOString())
-          .eq('rsvps.userID', user.id)
+          .eq('rsvps.userID', profile.id)
           .eq('rsvps.status', 'ACCEPTED')
           .order('startDate');
       }
 
       // Fetch subscriptions and RSVPs if user is logged in
-      const subscriptionsPromise = user ? supabase
+      const subscriptionsPromise = user && profile ? supabase
         .from('subscriptions')
         .select('subID, userID, status, gicsSector, gicsSubCategory')
-        .eq('userID', user.id)
+        .eq('userID', profile.id)
         .eq('status', 'ACTIVE') : Promise.resolve({ data: [], error: null });
 
-      const rsvpsPromise = user ? supabase
+      const rsvpsPromise = user && profile ? supabase
         .from('rsvps')
         .select('eventID, status, rsvpID')
-        .eq('userID', user.id) : Promise.resolve({ data: [], error: null });
+        .eq('userID', profile.id) : Promise.resolve({ data: [], error: null });
 
       // Get companies from GICS database for all companies
       const allCompaniesPromise = supabase
@@ -258,10 +260,7 @@ const CalendarPage: React.FC = () => {
         }
       }
 
-      // Optionally, match by event.tickerSymbol if available
-      if (event.tickerSymbol && company.tickerSymbol && event.tickerSymbol.toLowerCase() === company.tickerSymbol.toLowerCase()) {
-        return true;
-      }
+      // Note: events don't have tickerSymbol field, so we skip this check
 
       return false;
     });
@@ -327,7 +326,7 @@ const CalendarPage: React.FC = () => {
           .from('rsvps')
           .insert([{
             eventID: selectedEvent.eventID,
-            userID: user.id,
+            userID: profile.id,
             status: status
           }]);
 
@@ -402,7 +401,7 @@ const CalendarPage: React.FC = () => {
           .from('rsvps')
           .insert([{
             eventID: eventID,
-            userID: user.id,
+            userID: profile.id,
             status: status
           }])
           .select()

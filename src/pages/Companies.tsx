@@ -36,7 +36,7 @@ const Companies: React.FC = () => {
   const [selectedSubSectors, setSelectedSubSectors] = useState<string[]>([]);
   const [expandedSectors, setExpandedSectors] = useState<string[]>([]);
   const [isSubscribing, setIsSubscribing] = useState(false);
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,10 +48,10 @@ const Companies: React.FC = () => {
             .neq('companyName', '') // Filter out empty companies
             .neq('gicsSector', '') // Filter out empty sectors
             .order('companyName'),
-          user ? supabase
+          user && profile ? supabase
             .from('subscriptions')
             .select('subID, userID, status, gicsSector, gicsSubCategory')
-            .eq('userID', user.id)
+            .eq('userID', profile.id)
             .eq('status', 'ACTIVE') : { data: [], error: null }
         ]);
 
@@ -78,7 +78,7 @@ const Companies: React.FC = () => {
 
   const isSubscribedToCompany = (company: GicsCompany) => {
     return subscriptions.some(sub => 
-      sub.userID === user?.id && 
+      sub.userID === profile?.id && 
       sub.status === 'ACTIVE' &&
       sub.gicsSector === company.gicsSector &&
       (
@@ -92,7 +92,7 @@ const Companies: React.FC = () => {
 
   const isSubscribedToSector = (sector: string) => {
     return subscriptions.some(sub => 
-      sub.userID === user?.id && 
+      sub.userID === profile?.id && 
       sub.status === 'ACTIVE' &&
       sub.gicsSector === sector &&
       !sub.gicsSubCategory // Sector-level subscription only
@@ -101,7 +101,7 @@ const Companies: React.FC = () => {
 
   const isSubscribedToSubSector = (sector: string, subSector: string) => {
     return subscriptions.some(sub => 
-      sub.userID === user?.id && 
+      sub.userID === profile?.id && 
       sub.status === 'ACTIVE' &&
       sub.gicsSector === sector &&
       sub.gicsSubCategory === subSector
@@ -109,13 +109,13 @@ const Companies: React.FC = () => {
   };
 
   const handleSubscribe = async (gicsSector: string, gicsSubCategory: string) => {
-    if (!user) return;
+    if (!user || !profile) return;
 
     try {
       const { error } = await supabase
         .from('subscriptions')
         .insert({
-          userID: user.id,
+          userID: profile.id,
           status: 'ACTIVE',
           subStart: new Date().toISOString(),
           gicsSector: gicsSector,
@@ -127,7 +127,7 @@ const Companies: React.FC = () => {
       // Add to local state
       const newSubscription = {
         subID: crypto.randomUUID(),
-        userID: user.id,
+        userID: profile.id,
         status: 'ACTIVE',
         gicsSector: gicsSector,
         gicsSubCategory: gicsSubCategory
@@ -189,7 +189,7 @@ const Companies: React.FC = () => {
   };
 
   const handleBulkSubscribe = async () => {
-    if (!user || (selectedSectors.length === 0 && selectedSubSectors.length === 0)) return;
+    if (!user || !profile || (selectedSectors.length === 0 && selectedSubSectors.length === 0)) return;
 
     try {
       setIsSubscribing(true);
@@ -201,7 +201,7 @@ const Companies: React.FC = () => {
         return await supabase
           .from('subscriptions')
           .insert({
-            userID: user.id,
+            userID: profile.id,
             status: 'ACTIVE',
             subStart: new Date().toISOString(),
             gicsSector: sector
@@ -215,7 +215,7 @@ const Companies: React.FC = () => {
         return await supabase
           .from('subscriptions')
           .insert({
-            userID: user.id,
+            userID: profile.id,
             status: 'ACTIVE',
             subStart: new Date().toISOString(),
             gicsSector: sector,
@@ -238,7 +238,7 @@ const Companies: React.FC = () => {
       const { data: updatedSubscriptions, error: fetchError } = await supabase
         .from('subscriptions')
         .select('subID, userID, status, gicsSector, gicsSubCategory')
-        .eq('userID', user.id)
+        .eq('userID', profile.id)
         .eq('status', 'ACTIVE');
 
       if (fetchError) {
@@ -260,13 +260,13 @@ const Companies: React.FC = () => {
   };
 
   const handleUnsubscribe = async (gicsSector: string, gicsSubCategory?: string) => {
-    if (!user) return;
+    if (!user || !profile) return;
 
     try {
       let query = supabase
         .from('subscriptions')
         .update({ status: 'INACTIVE' })
-        .eq('userID', user.id)
+        .eq('userID', profile.id)
         .eq('gicsSector', gicsSector)
         .eq('status', 'ACTIVE');
 

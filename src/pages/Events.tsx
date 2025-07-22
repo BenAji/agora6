@@ -160,7 +160,7 @@ const Events: React.FC = () => {
         .from('rsvps')
         .select('*')
         .eq('eventID', selectedEvent.eventID)
-        .eq('userID', user.id)
+        .eq('userID', profile.id)
         .single();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
@@ -184,7 +184,7 @@ const Events: React.FC = () => {
           .from('rsvps')
           .insert([{
             eventID: selectedEvent.eventID,
-            userID: user.id,
+            userID: profile.id,
             status: status
           }]);
 
@@ -219,7 +219,7 @@ const Events: React.FC = () => {
           .from('rsvps')
           .select('rsvpID')
           .eq('eventID', eventID)
-          .eq('userID', user.id)
+          .eq('userID', profile.id)
           .single();
         if (existingRSVP) {
           await supabase
@@ -229,7 +229,7 @@ const Events: React.FC = () => {
         } else {
           await supabase
             .from('rsvps')
-            .insert([{ eventID, userID: user.id, status }]);
+            .insert([{ eventID, userID: profile.id, status }]);
         }
       }
       toast({ title: 'Bulk RSVP Updated', description: `Set ${status.toLowerCase()} for ${selectedEventIDs.length} events.` });
