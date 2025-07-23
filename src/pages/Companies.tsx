@@ -36,7 +36,7 @@ const Companies: React.FC = () => {
   const [selectedSubSectors, setSelectedSubSectors] = useState<string[]>([]);
   const [expandedSectors, setExpandedSectors] = useState<string[]>([]);
   const [isSubscribing, setIsSubscribing] = useState(false);
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,10 +48,10 @@ const Companies: React.FC = () => {
             .neq('companyName', '') // Filter out empty companies
             .neq('gicsSector', '') // Filter out empty sectors
             .order('companyName'),
-          user ? supabase
+          profile ? supabase
             .from('subscriptions')
             .select('subID, userID, status, gicsSector, gicsSubCategory')
-            .eq('userID', user.id)
+            .eq('userID', profile.user_id)
             .eq('status', 'ACTIVE') : { data: [], error: null }
         ]);
 
@@ -115,7 +115,7 @@ const Companies: React.FC = () => {
       const { error } = await supabase
         .from('subscriptions')
         .insert({
-          userID: user.id,
+          userID: profile.user_id,
           status: 'ACTIVE',
           subStart: new Date().toISOString(),
           gicsSector: gicsSector,
@@ -127,7 +127,7 @@ const Companies: React.FC = () => {
       // Add to local state
       const newSubscription = {
         subID: crypto.randomUUID(),
-        userID: user.id,
+        userID: profile.user_id,
         status: 'ACTIVE',
         gicsSector: gicsSector,
         gicsSubCategory: gicsSubCategory
@@ -189,60 +189,98 @@ const Companies: React.FC = () => {
   };
 
   const handleBulkSubscribe = async () => {
-    if (!user || (selectedSectors.length === 0 && selectedSubSectors.length === 0)) return;
+    if (!profile || (selectedSectors.length === 0 && selectedSubSectors.length === 0)) return;
 
     try {
       setIsSubscribing(true);
       console.log('Bulk subscribing to sectors:', selectedSectors, 'and subsectors:', selectedSubSectors);
 
-      // Create sector-level subscriptions for selected sectors
-      const sectorPromises = selectedSectors.map(async (sector) => {
-        console.log('Creating subscription for sector:', sector);
-        return await supabase
-          .from('subscriptions')
-          .insert({
-            userID: user.id,
-            status: 'ACTIVE',
-            subStart: new Date().toISOString(),
-            gicsSector: sector
-          });
-      });
+      // First, check for existing subscriptions to avoid duplicates
+      const { data: existingSubscriptions, error: existingError } = await supabase
+        .from('subscriptions')
+        .select('gicsSector, gicsSubCategory')
+        .eq('userID', profile.user_id)
+        .eq('status', 'ACTIVE');
 
-      // Create subsector-level subscriptions for selected subsectors
-      const subSectorPromises = selectedSubSectors.map(async (key) => {
-        const [sector, subSector] = key.split(':');
-        console.log('Creating subscription for subsector:', sector, subSector);
-        return await supabase
-          .from('subscriptions')
-          .insert({
-            userID: user.id,
-            status: 'ACTIVE',
-            subStart: new Date().toISOString(),
-            gicsSector: sector,
-            gicsSubCategory: subSector
-          });
-      });
-
-      const results = await Promise.all([...sectorPromises, ...subSectorPromises]);
-      
-      // Check for errors
-      const errors = results.filter(result => result.error);
-      if (errors.length > 0) {
-        console.error('Subscription errors:', errors);
-        throw new Error(`Failed to create ${errors.length} subscription(s)`);
+      if (existingError) {
+        console.error('Error fetching existing subscriptions:', existingError);
+        throw new Error('Failed to check existing subscriptions');
       }
+
+      const existingKeys = new Set();
+      existingSubscriptions?.forEach(sub => {
+        if (sub.gicsSector && !sub.gicsSubCategory) {
+          existingKeys.add(sub.gicsSector);
+        } else if (sub.gicsSector && sub.gicsSubCategory) {
+          existingKeys.add(`${sub.gicsSector}:${sub.gicsSubCategory}`);
+        }
+      });
+
+      // Filter out already existing subscriptions
+      const newSectors = selectedSectors.filter(sector => !existingKeys.has(sector));
+      const newSubSectors = selectedSubSectors.filter(key => !existingKeys.has(key));
+
+      console.log('New sectors to subscribe:', newSectors);
+      console.log('New subsectors to subscribe:', newSubSectors);
+
+      const subscriptionsToCreate = [];
+
+      // Prepare sector-level subscriptions
+      newSectors.forEach(sector => {
+        subscriptionsToCreate.push({
+          userID: profile.user_id,
+          status: 'ACTIVE' as const,
+          subStart: new Date().toISOString(),
+          gicsSector: sector,
+          gicsSubCategory: null
+        });
+      });
+
+      // Prepare subsector-level subscriptions
+      newSubSectors.forEach(key => {
+        const [sector, subSector] = key.split(':');
+        subscriptionsToCreate.push({
+          userID: profile.user_id,
+          status: 'ACTIVE' as const,
+          subStart: new Date().toISOString(),
+          gicsSector: sector,
+          gicsSubCategory: subSector
+        });
+      });
+
+      if (subscriptionsToCreate.length === 0) {
+        toast.error('All selected items are already subscribed');
+        setSelectedSectors([]);
+        setSelectedSubSectors([]);
+        return;
+      }
+
+      console.log('Creating subscriptions:', subscriptionsToCreate);
+
+      // Create all subscriptions in a single batch
+      const { data: results, error: insertError } = await supabase
+        .from('subscriptions')
+        .insert(subscriptionsToCreate)
+        .select();
+
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        throw new Error(`Database error: ${insertError.message}`);
+      }
+
+      console.log('Subscriptions created successfully:', results);
 
       console.log('All subscriptions created successfully');
 
       // Refresh subscriptions data
-      const { data: updatedSubscriptions, error: fetchError } = await supabase
+      const { data: updatedSubscriptions, error: refreshError } = await supabase
         .from('subscriptions')
         .select('subID, userID, status, gicsSector, gicsSubCategory')
-        .eq('userID', user.id)
+        .eq('userID', profile.user_id)
         .eq('status', 'ACTIVE');
 
-      if (fetchError) {
-        console.error('Error fetching updated subscriptions:', fetchError);
+      if (refreshError) {
+        console.error('Error fetching updated subscriptions:', refreshError);
       } else {
         setSubscriptions(updatedSubscriptions || []);
       }
@@ -266,7 +304,7 @@ const Companies: React.FC = () => {
       let query = supabase
         .from('subscriptions')
         .update({ status: 'INACTIVE' })
-        .eq('userID', user.id)
+        .eq('userID', profile.user_id)
         .eq('gicsSector', gicsSector)
         .eq('status', 'ACTIVE');
 

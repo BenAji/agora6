@@ -63,15 +63,15 @@ const Events: React.FC = () => {
       if (error) throw error;
       
       // Fetch RSVP status for each event if user is logged in
-      if (user && data) {
+      if (profile && data) {
         const eventsWithRSVP = await Promise.all(
           data.map(async (event) => {
             const { data: rsvp } = await supabase
               .from('rsvps')
               .select('status')
               .eq('eventID', event.eventID)
-              .eq('userID', user.id)
-              .single();
+              .eq('userID', profile.id)
+              .maybeSingle();
             
             return {
               ...event,
@@ -144,7 +144,7 @@ const Events: React.FC = () => {
   };
 
   const handleDetailRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
-    if (!user || !selectedEvent) {
+    if (!profile || !selectedEvent) {
       toast({
         title: "Authentication Required",
         description: "Please log in to RSVP to events",
@@ -160,10 +160,10 @@ const Events: React.FC = () => {
         .from('rsvps')
         .select('*')
         .eq('eventID', selectedEvent.eventID)
-        .eq('userID', user.id)
-        .single();
+        .eq('userID', profile.id)
+        .maybeSingle();
 
-      if (fetchError && fetchError.code !== 'PGRST116') {
+      if (fetchError) {
         throw fetchError;
       }
 
@@ -184,7 +184,7 @@ const Events: React.FC = () => {
           .from('rsvps')
           .insert([{
             eventID: selectedEvent.eventID,
-            userID: user.id,
+            userID: profile.id,
             status: status
           }]);
 
@@ -210,7 +210,7 @@ const Events: React.FC = () => {
   };
 
   const handleBulkRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
-    if (!user || selectedEventIDs.length === 0) return;
+    if (!profile || selectedEventIDs.length === 0) return;
     setIsRSVPing(true);
     try {
       for (const eventID of selectedEventIDs) {
@@ -219,8 +219,8 @@ const Events: React.FC = () => {
           .from('rsvps')
           .select('rsvpID')
           .eq('eventID', eventID)
-          .eq('userID', user.id)
-          .single();
+          .eq('userID', profile.id)
+          .maybeSingle();
         if (existingRSVP) {
           await supabase
             .from('rsvps')
@@ -229,7 +229,7 @@ const Events: React.FC = () => {
         } else {
           await supabase
             .from('rsvps')
-            .insert([{ eventID, userID: user.id, status }]);
+            .insert([{ eventID, userID: profile.id, status }]);
         }
       }
       toast({ title: 'Bulk RSVP Updated', description: `Set ${status.toLowerCase()} for ${selectedEventIDs.length} events.` });

@@ -19,8 +19,7 @@ Develop **Agora**, a comprehensive event coordination platform for Investor Rela
 - **Event Status Tracking**: Upcoming, ongoing, completed
 
 ### 3. Advanced Calendar System (Investor View Only)
-- **Company-based Grid**: Y-axis = companies, X-axis = weekdays (Mon-Fri)
-- **Monthly Default**: 4-week view (Monday to Friday)
+- **Company-based Grid**: Y-axis = companies, X-axis = weekdays 
 - **Dynamic Sizing**: Automatically adjusts for varying numbers of companies
 - **Subscription-Based**: Shows only events for subscribed companies/sectors
 - **Auto-Scheduling**: Events appear when subscribing to companies
@@ -31,7 +30,7 @@ Develop **Agora**, a comprehensive event coordination platform for Investor Rela
 
 ### 4. RSVP Management
 - **Status Tracking**: Accepted, Declined, Tentative, Pending
-- **Bulk Operations**: For managers
+- **Bulk Operations**: For managers, managers inherit all features of analyst
 - **Calendar Integration**: RSVP'd events automatically appear on calendar
 - **Subscription Override**: RSVP to non-subscribed events adds them to calendar
 
@@ -172,7 +171,6 @@ Develop **Agora**, a comprehensive event coordination platform for Investor Rela
 The application is complete when:
 - ✅ Enhanced signup process (role, company, GICS subscriptions)
 - ✅ Bloomberg dark theme consistently applied
-- ✅ Advanced calendar system with dynamic sizing
 - ✅ Subscription-based calendar population
 - ✅ RSVP integration with calendar
 - ✅ Role-based access control

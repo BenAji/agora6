@@ -7,18 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { supabase } from '@/integrations/supabase/client';
 import { Eye, EyeOff, Building2, Users } from 'lucide-react';
-
-interface Company {
-  companyID: string;
-  companyName: string;
-}
 
 const Auth: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [companies, setCompanies] = useState<Company[]>([]);
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
 
@@ -36,7 +29,6 @@ const Auth: React.FC = () => {
     firstName: '',
     lastName: '',
     role: '',
-    companyId: '',
   });
 
   useEffect(() => {
@@ -44,24 +36,6 @@ const Auth: React.FC = () => {
       navigate('/dashboard');
     }
   }, [user, navigate]);
-
-  useEffect(() => {
-    fetchCompanies();
-  }, []);
-
-  const fetchCompanies = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('user_companies')
-        .select('companyID, companyName')
-        .order('companyName');
-
-      if (error) throw error;
-      setCompanies(data || []);
-    } catch (error) {
-      console.error('Error fetching companies:', error);
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,11 +54,10 @@ const Auth: React.FC = () => {
 
     setIsLoading(true);
 
-    await signUp(signupData.email, signupData.password, {
+    const result = await signUp(signupData.email, signupData.password, {
       firstName: signupData.firstName,
       lastName: signupData.lastName,
       role: signupData.role,
-      companyId: signupData.companyId || undefined,
     });
 
     setIsLoading(false);
@@ -204,7 +177,10 @@ const Auth: React.FC = () => {
 
                   <div className="space-y-2">
                     <Label htmlFor="role">Role</Label>
-                    <Select onValueChange={(value) => setSignupData({ ...signupData, role: value })}>
+                    <Select
+                      value={signupData.role}
+                      onValueChange={(value) => setSignupData({ ...signupData, role: value })}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select your role" />
                       </SelectTrigger>
@@ -227,22 +203,6 @@ const Auth: React.FC = () => {
                             <span>Investment Analyst</span>
                           </div>
                         </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="company">Company (Optional)</Label>
-                    <Select onValueChange={(value) => setSignupData({ ...signupData, companyId: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select your company" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {companies.map((company) => (
-                          <SelectItem key={company.companyID} value={company.companyID}>
-                            {company.companyName}
-                          </SelectItem>
-                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -278,6 +238,10 @@ const Auth: React.FC = () => {
                       onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
                       required
                     />
+                  </div>
+
+                  <div className="text-sm text-text-muted text-center">
+                    You can update your company and GICS subscriptions in the Settings page after signing up.
                   </div>
 
                   <Button type="submit" className="w-full" disabled={isLoading}>
