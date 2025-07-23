@@ -110,6 +110,78 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_id: string | null
+          id: string
+          message_id: string | null
+          notification_type: string
+          sent_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          event_id?: string | null
+          id?: string
+          message_id?: string | null
+          notification_type: string
+          sent_at?: string | null
+          status: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          event_id?: string | null
+          id?: string
+          message_id?: string | null
+          notification_type?: string
+          sent_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_preferences: {
+        Row: {
+          companies: string[] | null
+          created_at: string
+          enabled: boolean
+          frequency_days: number
+          gics_sectors: string[] | null
+          id: string
+          notification_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          companies?: string[] | null
+          created_at?: string
+          enabled?: boolean
+          frequency_days?: number
+          gics_sectors?: string[] | null
+          id?: string
+          notification_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          companies?: string[] | null
+          created_at?: string
+          enabled?: boolean
+          frequency_days?: number
+          gics_sectors?: string[] | null
+          id?: string
+          notification_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_id: string | null
