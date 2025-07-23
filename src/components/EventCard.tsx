@@ -68,7 +68,7 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
         .select('*')
         .eq('eventID', event.id)
         .eq('userID', profile.id)
-        .single();
+        .maybeSingle();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
         throw fetchError;

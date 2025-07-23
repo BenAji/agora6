@@ -303,7 +303,7 @@ const CalendarPage: React.FC = () => {
         .select('*')
         .eq('eventID', selectedEvent.eventID)
         .eq('userID', user.id)
-        .single();
+        .maybeSingle();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
         throw fetchError;

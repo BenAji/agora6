@@ -71,7 +71,7 @@ const Events: React.FC = () => {
               .select('status')
               .eq('eventID', event.eventID)
               .eq('userID', user.id)
-              .single();
+              .maybeSingle();
             
             return {
               ...event,
@@ -161,7 +161,7 @@ const Events: React.FC = () => {
         .select('*')
         .eq('eventID', selectedEvent.eventID)
         .eq('userID', profile.id)
-        .single();
+        .maybeSingle();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
         throw fetchError;
@@ -220,7 +220,7 @@ const Events: React.FC = () => {
           .select('rsvpID')
           .eq('eventID', eventID)
           .eq('userID', profile.id)
-          .single();
+          .maybeSingle();
         if (existingRSVP) {
           await supabase
             .from('rsvps')
