@@ -1,1 +1,54 @@
 project_id = "mqbeopporomwnjcolnmf"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[graphql]
+enabled = true
+port = 54329
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public"]
+
+[inbucket]
+enabled = true
+port = 54324
+smtp_port = 54325
+
+[realtime]
+enabled = true
+ip_version = "dual"
+port = 54327
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://localhost"
+
+# A string used to distinguish different Supabase projects on the same host
+external_id = "mqbeopporomwnjcolnmf"
+
+[auth]
+enabled = true
+port = 54324
+external_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+
+[edge_runtime]
+enabled = true
+port = 54326
+ip_version = "dual"
+
+# Configure the Management API
+[rest]
+enabled = true
+port = 54322
+
+[functions.send-notification]
+verify_jwt = false
+
+[functions.process-notifications]
+verify_jwt = false
