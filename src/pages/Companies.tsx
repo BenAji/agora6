@@ -48,6 +48,7 @@ const Companies: React.FC = () => {
             .neq('companyName', '') // Filter out empty companies
             .neq('gicsSector', '') // Filter out empty sectors
             .order('companyName'),
+
           profile ? supabase
             .from('subscriptions')
             .select('subID, userID, status, gicsSector, gicsSubCategory')
@@ -78,7 +79,7 @@ const Companies: React.FC = () => {
 
   const isSubscribedToCompany = (company: GicsCompany) => {
     return subscriptions.some(sub => 
-      sub.userID === user?.id && 
+      sub.userID === profile?.id && 
       sub.status === 'ACTIVE' &&
       sub.gicsSector === company.gicsSector &&
       (
@@ -92,7 +93,7 @@ const Companies: React.FC = () => {
 
   const isSubscribedToSector = (sector: string) => {
     return subscriptions.some(sub => 
-      sub.userID === user?.id && 
+      sub.userID === profile?.id && 
       sub.status === 'ACTIVE' &&
       sub.gicsSector === sector &&
       !sub.gicsSubCategory // Sector-level subscription only
@@ -101,7 +102,7 @@ const Companies: React.FC = () => {
 
   const isSubscribedToSubSector = (sector: string, subSector: string) => {
     return subscriptions.some(sub => 
-      sub.userID === user?.id && 
+      sub.userID === profile?.id && 
       sub.status === 'ACTIVE' &&
       sub.gicsSector === sector &&
       sub.gicsSubCategory === subSector
@@ -109,7 +110,7 @@ const Companies: React.FC = () => {
   };
 
   const handleSubscribe = async (gicsSector: string, gicsSubCategory: string) => {
-    if (!user) return;
+    if (!user || !profile) return;
 
     try {
       const { error } = await supabase
@@ -298,7 +299,7 @@ const Companies: React.FC = () => {
   };
 
   const handleUnsubscribe = async (gicsSector: string, gicsSubCategory?: string) => {
-    if (!user) return;
+    if (!user || !profile) return;
 
     try {
       let query = supabase

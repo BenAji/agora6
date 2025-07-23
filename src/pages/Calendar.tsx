@@ -28,6 +28,8 @@ interface Company {
   companyID: string;
   companyName: string;
   tickerSymbol: string;
+  gicsSector: string;
+  gicsSubCategory: string;
 }
 
 interface Subscription {
@@ -87,7 +89,7 @@ const CalendarPage: React.FC = () => {
         .order('startDate');
 
       // If showing only RSVP'd events and user is logged in, filter by RSVP status
-      if (showOnlyRSVP && user) {
+      if (showOnlyRSVP && user && profile) {
         eventsQuery = supabase
           .from('events')
           .select(`
@@ -258,10 +260,7 @@ const CalendarPage: React.FC = () => {
         }
       }
 
-      // Optionally, match by event.tickerSymbol if available
-      if (event.tickerSymbol && company.tickerSymbol && event.tickerSymbol.toLowerCase() === company.tickerSymbol.toLowerCase()) {
-        return true;
-      }
+      // Note: events don't have tickerSymbol field, so we skip this check
 
       return false;
     });
