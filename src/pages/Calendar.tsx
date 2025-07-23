@@ -105,13 +105,13 @@ const CalendarPage: React.FC = () => {
       }
 
       // Fetch subscriptions and RSVPs if user is logged in
-      const subscriptionsPromise = user && profile ? supabase
+      const subscriptionsPromise = profile ? supabase
         .from('subscriptions')
         .select('subID, userID, status, gicsSector, gicsSubCategory')
         .eq('userID', profile.id)
         .eq('status', 'ACTIVE') : Promise.resolve({ data: [], error: null });
 
-      const rsvpsPromise = user && profile ? supabase
+      const rsvpsPromise = profile ? supabase
         .from('rsvps')
         .select('eventID, status, rsvpID')
         .eq('userID', profile.id) : Promise.resolve({ data: [], error: null });
@@ -302,10 +302,10 @@ const CalendarPage: React.FC = () => {
         .from('rsvps')
         .select('*')
         .eq('eventID', selectedEvent.eventID)
-        .eq('userID', user.id)
+        .eq('userID', profile.id)
         .maybeSingle();
 
-      if (fetchError && fetchError.code !== 'PGRST116') {
+      if (fetchError) {
         throw fetchError;
       }
 
@@ -366,7 +366,7 @@ const CalendarPage: React.FC = () => {
 
   // Quick RSVP function for grid usage
   const handleQuickRSVP = async (eventID: string, status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
-    if (!user) {
+    if (!profile) {
       toast({
         title: "Authentication Required",
         description: "Please log in to RSVP to events",

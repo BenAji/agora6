@@ -51,7 +51,7 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
   };
 
   const handleRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
-    if (!user || !profile) {
+    if (!profile) {
       toast({
         title: "Authentication Required",
         description: "Please log in to RSVP to events",
@@ -70,7 +70,7 @@ const EventCard = ({ event, onViewDetails, onRSVPUpdate }: EventCardProps) => {
         .eq('userID', profile.id)
         .maybeSingle();
 
-      if (fetchError && fetchError.code !== 'PGRST116') {
+      if (fetchError) {
         throw fetchError;
       }
 
