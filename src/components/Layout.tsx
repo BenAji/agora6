@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Building2, Calendar, Users, Settings, BarChart3, LogOut, ChevronDown, User } from 'lucide-react';
+import { Building2, Calendar, Users, Settings, BarChart3, LogOut, ChevronDown, User, CalendarDays } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   DropdownMenu,
@@ -23,7 +23,7 @@ const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
   const navItems = [
     // Only show Dashboard for IR Admins
     ...(profile?.role === 'IR_ADMIN' ? [{ id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/dashboard' }] : []),
-    { id: 'events', label: 'Events', icon: Calendar, path: '/events' },
+    { id: 'events', label: 'Events', icon: CalendarDays, path: '/events' },
     { id: 'calendar', label: 'Calendar', icon: Calendar, path: '/calendar' },
     { id: 'companies', label: 'Companies', icon: Building2, path: '/companies' },
   ];
@@ -53,10 +53,10 @@ const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
                   <Button
                     variant={isActive ? "default" : "ghost"}
                     size="sm"
-                    className={`text-xs ${
+                    className={`text-xs transition-all duration-200 ${
                       isActive 
-                        ? 'bg-gold text-black font-semibold' 
-                        : 'text-text-secondary hover:text-gold hover:bg-surface-secondary'
+                        ? 'bg-gold text-black font-semibold hover:bg-gold/90' 
+                        : 'text-text-secondary hover:text-gold hover:bg-surface-secondary/50'
                     }`}
                   >
                     <Icon className="mr-1 h-3 w-3" />
@@ -73,7 +73,7 @@ const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-text-secondary hover:text-gold hover:bg-surface-secondary flex items-center space-x-1"
+                className="text-xs text-text-secondary hover:text-gold hover:bg-surface-secondary/50 flex items-center space-x-1 transition-all duration-200"
               >
                 <div className="w-6 h-6 bg-gold rounded-full flex items-center justify-center">
                   <User className="h-3 w-3 text-black" />
@@ -100,21 +100,21 @@ const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link to="/settings" className="flex items-center space-x-2 cursor-pointer">
+                <Link to="/settings" className="flex items-center space-x-2 cursor-pointer hover:text-gold transition-colors">
                   <Settings className="h-4 w-4" />
                   <span>Settings</span>
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link to="/users" className="flex items-center space-x-2 cursor-pointer">
+                <Link to="/users" className="flex items-center space-x-2 cursor-pointer hover:text-gold transition-colors">
                   <Users className="h-4 w-4" />
                   <span>Manage Users</span>
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={signOut}
-                className="flex items-center space-x-2 cursor-pointer text-error hover:text-error"
+                className="flex items-center space-x-2 cursor-pointer text-error hover:text-error transition-colors"
               >
                 <LogOut className="h-4 w-4" />
                 <span>Sign Out</span>
@@ -125,7 +125,7 @@ const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1">
         {children}
       </main>
     </div>

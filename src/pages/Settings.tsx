@@ -9,13 +9,12 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Settings as SettingsIcon, User, Bell, Shield, Palette, Database, Users, Building, Globe, ChevronDown, ChevronRight, Plus } from 'lucide-react';
+import { Settings as SettingsIcon, User, Bell, Shield, Palette, Database, Users, Building, Globe, ChevronDown, ChevronRight, Plus, CalendarDays } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import InviteUserDialog from '@/components/InviteUserDialog';
-import NotificationPreferences from '@/components/NotificationPreferences';
 
 interface Company {
   companyID: string;
@@ -59,8 +58,9 @@ const COMMON_LOCATIONS = [
 ];
 
 const Settings: React.FC = () => {
-  const { user, profile: userProfile, signOut } = useAuth();
-  
+    const { user, profile: userProfile, signOut } = useAuth();
+  const { toast } = useToast();
+
   // Profile state
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -99,10 +99,9 @@ const Settings: React.FC = () => {
   // Add state for all section collapses
   const [profileSectionOpen, setProfileSectionOpen] = useState(false);
   const [companySectionOpen, setCompanySectionOpen] = useState(false);
-  const [notificationsSectionOpen, setNotificationsSectionOpen] = useState(false);
+  const [preferencesSectionOpen, setPreferencesSectionOpen] = useState(false);
   const [securitySectionOpen, setSecuritySectionOpen] = useState(false);
   const [userManagementSectionOpen, setUserManagementSectionOpen] = useState(false);
-  const [appearanceSectionOpen, setAppearanceSectionOpen] = useState(false);
   const [dangerZoneSectionOpen, setDangerZoneSectionOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
@@ -121,6 +120,29 @@ const Settings: React.FC = () => {
     showTooltips: true,
     autoRefresh: true,
     refreshInterval: 30, // seconds
+  });
+
+  // Calendar preferences state
+  const [calendarPreferences, setCalendarPreferences] = useState({
+    defaultView: 'week', // 'week', 'month'
+    showEventCategory: false, // show/hide event legend
+    defaultEventFilter: 'all', // 'all', 'rsvp'
+    defaultSort: 'events', // 'events', 'alpha'
+  });
+
+  // Event view preferences state
+  const [eventViewPreferences, setEventViewPreferences] = useState({
+    displayMode: 'list', // 'list', 'compact', 'cards'
+    compactMode: false, // use smaller text and spacing
+    showStatusBadges: true, // show timing and RSVP badges
+    autoRefresh: false, // auto-refresh every 5 minutes
+  });
+
+  // Notification preferences state
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    emailNotifications: true,
+    eventReminders: true,
+    rsvpUpdates: true,
   });
 
   // When a company is selected, set the location if available
@@ -144,10 +166,10 @@ const Settings: React.FC = () => {
 
   // Fetch user subscriptions after profile is loaded
   useEffect(() => {
-    if (userProfile) {
+    if (profile) {
       fetchUserSubscriptions();
     }
-  }, [userProfile]);
+  }, [profile]);
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -228,13 +250,13 @@ const Settings: React.FC = () => {
   };
 
   const fetchUserSubscriptions = async () => {
-    if (!user || !userProfile) return;
+    if (!profile) return;
     
     try {
       const { data, error } = await supabase
         .from('subscriptions')
         .select('gicsSector, gicsSubCategory')
-        .eq('userID', userProfile.id);
+        .eq('userID', profile.id);
 
       if (error) throw error;
       
@@ -458,7 +480,7 @@ const Settings: React.FC = () => {
       });
       
       // Collapse the appearance card after successful save
-      setAppearanceSectionOpen(false);
+      setPreferencesSectionOpen(false);
     } catch (error) {
       console.error('Error saving appearance settings:', error);
       toast({
@@ -483,75 +505,158 @@ const Settings: React.FC = () => {
     }
   }, []);
 
+  // Calendar preferences functions
+  const handleCalendarPreferenceChange = (key: string, value: any) => {
+    setCalendarPreferences(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const saveCalendarPreferences = async () => {
+    try {
+      // Save to localStorage
+      localStorage.setItem('agora-calendar-preferences', JSON.stringify(calendarPreferences));
+      
+      toast({
+        title: "Success",
+        description: "Calendar preferences saved successfully",
+      });
+      
+      // Collapse the preferences card after successful save
+      setPreferencesSectionOpen(false);
+    } catch (error) {
+      console.error('Error saving calendar preferences:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save calendar preferences",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Event view preferences functions
+  const handleEventViewPreferenceChange = (key: string, value: any) => {
+    setEventViewPreferences(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const saveEventViewPreferences = async () => {
+    try {
+      // Save to localStorage
+      localStorage.setItem('agora-event-view-preferences', JSON.stringify(eventViewPreferences));
+      
+      toast({
+        title: "Success",
+        description: "Event view preferences saved successfully",
+      });
+      
+      // Collapse the preferences card after successful save
+      setPreferencesSectionOpen(false);
+    } catch (error) {
+      console.error('Error saving event view preferences:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save event view preferences",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Load calendar preferences on component mount
+  useEffect(() => {
+    const savedPreferences = localStorage.getItem('agora-calendar-preferences');
+    if (savedPreferences) {
+      try {
+        const parsed = JSON.parse(savedPreferences);
+        setCalendarPreferences(parsed);
+      } catch (error) {
+        console.error('Error loading calendar preferences:', error);
+      }
+    }
+  }, []);
+
   // Group GICS companies by sector
   const gicsSectors = Array.from(new Set(gicsCompanies.map(company => company.gicsSector))).sort();
   const gicsSubSectors = Array.from(new Set(gicsCompanies.map(company => company.gicsSubCategory))).sort();
 
   return (
     <Layout currentPage="settings">
-      <div className="p-8 bg-background min-h-screen">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gold mb-2">Settings</h1>
-            <p className="text-text-secondary">Manage your account and application preferences</p>
+      <div className="p-6 space-y-6 bg-background min-h-screen flex justify-center">
+        <div className="w-full max-w-4xl space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-text-primary flex items-center">
+                <SettingsIcon className="mr-2 h-5 w-5 text-gold" />
+                Settings
+              </h1>
+              <p className="text-xs text-text-muted">
+                Manage your account settings and preferences
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Profile Settings */}
             <Card className="bg-surface-primary border-border-default">
               <CardHeader 
                 className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
                 onClick={() => setProfileSectionOpen(!profileSectionOpen)}
               >
-                <CardTitle className="flex items-center justify-between text-text-primary">
+                <CardTitle className="flex items-center justify-between text-text-primary text-sm">
                   <div className="flex items-center">
-                  <User className="mr-2 h-5 w-5 text-gold" />
+                  <User className="mr-2 h-4 w-4 text-gold" />
                   Profile Settings
                   </div>
                   {profileSectionOpen ? (
-                    <ChevronDown className="h-5 w-5 text-gold" />
+                    <ChevronDown className="h-4 w-4 text-gold" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-gold" />
+                    <ChevronRight className="h-4 w-4 text-gold" />
                   )}
                 </CardTitle>
               </CardHeader>
               {profileSectionOpen && (
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
+              <CardContent className="space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="firstName" className="text-xs">First Name</Label>
                       <Input 
                         id="firstName" 
                         placeholder="Enter first name"
                         value={profileForm.firstName}
                         onChange={(e) => setProfileForm(prev => ({ ...prev, firstName: e.target.value }))}
                         disabled={profileLoading}
+                        className="text-xs"
                       />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
+                  <div className="space-y-1">
+                    <Label htmlFor="lastName" className="text-xs">Last Name</Label>
                       <Input 
                         id="lastName" 
                         placeholder="Enter last name"
                         value={profileForm.lastName}
                         onChange={(e) => setProfileForm(prev => ({ ...prev, lastName: e.target.value }))}
                         disabled={profileLoading}
+                        className="text-xs"
                       />
                     </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={user?.email || ''} disabled />
+                <div className="space-y-1">
+                  <Label htmlFor="email" className="text-xs">Email</Label>
+                  <Input id="email" type="email" value={user?.email || ''} disabled className="text-xs" />
                 </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Role</Label>
+                  <div className="space-y-1">
+                    <Label htmlFor="role" className="text-xs">Role</Label>
                     <Select 
                       value={profileForm.role} 
                       onValueChange={(value) => setProfileForm(prev => ({ ...prev, role: value }))}
                       disabled={profileLoading}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select your role" />
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="IR_ADMIN">IR Admin</SelectItem>
@@ -560,337 +665,452 @@ const Settings: React.FC = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button 
-                    onClick={handleUpdateProfile}
-                    disabled={updateProfileLoading || profileLoading}
-                  >
-                    {updateProfileLoading ? 'Updating...' : 'Update Profile'}
-                  </Button>
-                </CardContent>
+                  <div className="space-y-1">
+                    <Label htmlFor="company" className="text-xs">Company</Label>
+                    <Select 
+                      value={selectedCompanyId} 
+                      onValueChange={setSelectedCompanyId}
+                      disabled={profileLoading}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue placeholder="Select a company" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {companies.map((company) => (
+                          <SelectItem key={company.companyID} value={company.companyID}>
+                            {company.companyName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="location" className="text-xs">Location</Label>
+                    <Input 
+                      id="location" 
+                      placeholder="Enter location"
+                      value={companyLocation}
+                      onChange={(e) => setCompanyLocation(e.target.value)}
+                      disabled={profileLoading}
+                      className="text-xs"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button 
+                      onClick={handleUpdateProfile} 
+                      disabled={profileLoading}
+                      size="sm"
+                      className="text-xs"
+                    >
+                      {profileLoading ? 'Updating...' : 'Update Profile'}
+                    </Button>
+                  </div>
+              </CardContent>
               )}
             </Card>
 
-            {/* Company Settings */}
+            {/* Company Management */}
             <Card className="bg-surface-primary border-border-default">
               <CardHeader 
                 className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
                 onClick={() => setCompanySectionOpen(!companySectionOpen)}
               >
-                <CardTitle className="flex items-center justify-between text-text-primary">
+                <CardTitle className="flex items-center justify-between text-text-primary text-sm">
                   <div className="flex items-center">
-                    <Building className="mr-2 h-5 w-5 text-gold" />
-                    Company Settings
+                    <Building className="mr-2 h-4 w-4 text-gold" />
+                    Company Management
                   </div>
                   {companySectionOpen ? (
-                    <ChevronDown className="h-5 w-5 text-gold" />
+                    <ChevronDown className="h-4 w-4 text-gold" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-gold" />
+                    <ChevronRight className="h-4 w-4 text-gold" />
                   )}
                 </CardTitle>
               </CardHeader>
               {companySectionOpen && (
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3 text-xs">
                   <div className="space-y-2">
-                    <Label>Select your Company</Label>
+                    <Label className="text-xs">Add New Company</Label>
                     <div className="flex gap-2">
-                      <Select 
-                        value={selectedCompanyId} 
-                        onValueChange={setSelectedCompanyId}
-                        disabled={companiesLoading}
+                      <Input 
+                        placeholder="Company name"
+                        value={newCompany}
+                        onChange={(e) => setNewCompany(e.target.value)}
+                        className="text-xs"
+                      />
+                      <Input 
+                        placeholder="Location (optional)"
+                        value={companyLocation}
+                        onChange={(e) => setCompanyLocation(e.target.value)}
+                        className="text-xs"
+                      />
+                      <Button 
+                        onClick={handleAddCompany} 
+                        disabled={!newCompany.trim()}
+                        size="sm"
+                        className="text-xs"
                       >
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="Select your company" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {companies.map((company) => (
-                            <SelectItem key={company.companyID} value={company.companyID}>
-                              {company.companyName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Dialog open={addCompanyOpen} onOpenChange={setAddCompanyOpen}>
-                        <DialogTrigger asChild>
-                          <Button variant="outline">Add Company</Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Add New Company</DialogTitle>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="newCompany">Company Name</Label>
-                              <Input
-                                id="newCompany"
-                                placeholder="Enter company name"
-                                value={newCompany}
-                                onChange={(e) => setNewCompany(e.target.value)}
-                                disabled={addCompanyLoading}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="companyLocation">Location</Label>
-                              <Input
-                                id="companyLocation"
-                                placeholder="Enter or select a location"
-                                value={companyLocation}
-                                onChange={e => {
-                                  setCompanyLocation(e.target.value);
-                                  setLocationSuggestions(
-                                    e.target.value
-                                      ? COMMON_LOCATIONS.filter(loc => loc.toLowerCase().includes(e.target.value.toLowerCase()))
-                                      : []
-                                  );
-                                }}
-                                autoComplete="off"
-                                disabled={addCompanyLoading}
-                              />
-                              {locationSuggestions.length > 0 && (
-                                <div className="border border-border-default rounded bg-surface-secondary mt-1 max-h-32 overflow-y-auto z-50 absolute">
-                                  {locationSuggestions.map(loc => (
-                                    <div
-                                      key={loc}
-                                      className="px-3 py-1 hover:bg-gold/10 cursor-pointer"
-                                      onClick={() => {
-                                        setCompanyLocation(loc);
-                                        setLocationSuggestions([]);
-                                      }}
-                                    >
-                                      {loc}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                            {addCompanyError && (
-                              <p className="text-sm text-red-500">{addCompanyError}</p>
-                            )}
-                            {addCompanySuccess && (
-                              <p className="text-sm text-green-500">{addCompanySuccess}</p>
-                            )}
-                            <div className="flex justify-end gap-2">
-                              <Button 
-                                variant="outline" 
-                                onClick={() => setAddCompanyOpen(false)}
-                                disabled={addCompanyLoading}
-                              >
-                                Cancel
-                              </Button>
-                              <Button 
-                                onClick={handleAddCompany}
-                                disabled={addCompanyLoading || !newCompany.trim()}
-                              >
-                                {addCompanyLoading ? 'Adding...' : 'Add Company'}
-                              </Button>
-                            </div>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
+                        <Plus className="mr-1 h-3 w-3" />
+                        Add
+                      </Button>
                     </div>
                   </div>
+                  <Separator />
                   <div className="space-y-2">
-                    <Label htmlFor="companyLocationUpdate">Location</Label>
-                    <Input
-                      id="companyLocationUpdate"
-                      placeholder="Enter or select a location"
-                      value={companyLocation}
-                      onChange={e => {
-                        setCompanyLocation(e.target.value);
-                        setLocationSuggestions(
-                          e.target.value
-                            ? COMMON_LOCATIONS.filter(loc => loc.toLowerCase().includes(e.target.value.toLowerCase()))
-                            : []
-                        );
-                      }}
-                      autoComplete="off"
-                      disabled={companiesLoading}
-                    />
-                    {locationSuggestions.length > 0 && (
-                      <div className="border border-border-default rounded bg-surface-secondary mt-1 max-h-32 overflow-y-auto z-50 absolute">
-                        {locationSuggestions.map(loc => (
-                          <div
-                            key={loc}
-                            className="px-3 py-1 hover:bg-gold/10 cursor-pointer"
-                            onClick={() => {
-                              setCompanyLocation(loc);
-                              setLocationSuggestions([]);
-                            }}
-                          >
-                            {loc}
+                    <Label className="text-xs">Existing Companies</Label>
+                    <div className="space-y-1">
+                      {companies.map((company) => (
+                        <div key={company.companyID} className="flex items-center justify-between p-2 bg-surface-secondary rounded">
+                          <div>
+                            <div className="text-xs font-medium">{company.companyName}</div>
+                            {company.location && (
+                              <div className="text-xs text-text-muted">{company.location}</div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <Button 
-                    onClick={handleUpdateProfile}
-                    disabled={updateProfileLoading || profileLoading}
-                  >
-                    {updateProfileLoading ? 'Updating...' : 'Update Company'}
-                  </Button>
                 </CardContent>
               )}
             </Card>
 
-            {/* GICS Subscription Settings */}
+            {/* GICS Companies */}
             <Card className="bg-surface-primary border-border-default">
               <CardHeader 
                 className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
                 onClick={() => setGicsSectionOpen(!gicsSectionOpen)}
               >
-                <CardTitle className="flex items-center justify-between text-text-primary">
+                <CardTitle className="flex items-center justify-between text-text-primary text-sm">
                   <div className="flex items-center">
-                    <Globe className="mr-2 h-5 w-5 text-gold" />
-                    GICS Sector & Company Subscriptions
+                    <Globe className="mr-2 h-4 w-4 text-gold" />
+                    GICS Companies
                   </div>
                   {gicsSectionOpen ? (
-                    <ChevronDown className="h-5 w-5 text-gold" />
+                    <ChevronDown className="h-4 w-4 text-gold" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-gold" />
+                    <ChevronRight className="h-4 w-4 text-gold" />
                   )}
                 </CardTitle>
               </CardHeader>
               {gicsSectionOpen && (
-                <CardContent className="space-y-4">
-                  {gicsLoading ? (
-                    <p className="text-text-muted">Loading GICS data...</p>
-                  ) : (
-                    <>
-                      <div className="space-y-4">
-                        {/* GICS Sectors */}
-                        <div>
-                          <Label className="text-sm font-medium">GICS Sectors</Label>
-                          <div className="mt-2 space-y-2 max-h-32 overflow-y-auto">
-                            {gicsSectors.map((sector) => {
-                              const sectorCompanies = gicsCompanies.filter(company => company.gicsSector === sector);
-                              const allSelected = sectorCompanies.every(company => selectedGics.has(company.tickerSymbol));
-                              const someSelected = sectorCompanies.some(company => selectedGics.has(company.tickerSymbol));
-                              
-                              return (
-                                <div key={sector} className="space-y-1">
-                                  <div className="flex items-center space-x-2">
-                                    <Checkbox
-                                      checked={allSelected}
-                                      onCheckedChange={(checked) => {
-                                        const newSelected = new Set(selectedGics);
-                                        sectorCompanies.forEach(company => {
-                                          if (checked) {
-                                            newSelected.add(company.tickerSymbol);
-                                          } else {
-                                            newSelected.delete(company.tickerSymbol);
-                                          }
-                                        });
-                                        setSelectedGics(newSelected);
-                                      }}
-                                    />
-                                    <Label className="text-sm font-medium">{sector}</Label>
-                                  </div>
-                                  <div className="ml-6 space-y-1">
-                                    {sectorCompanies.map((company) => (
-                                      <div key={company.tickerSymbol} className="flex items-center space-x-2">
-                                        <Checkbox
-                                          checked={selectedGics.has(company.tickerSymbol)}
-                                          onCheckedChange={() => handleGicsToggle(company.tickerSymbol)}
-                                        />
-                                        <Label className="text-sm">
-                                          {company.companyName} ({company.tickerSymbol})
-                                        </Label>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                <CardContent className="space-y-3 text-xs">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Select GICS Companies</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                      {gicsCompanies.map((company) => (
+                        <div key={company.tickerSymbol} className="flex items-center space-x-2 p-2 bg-surface-secondary rounded">
+                          <Checkbox 
+                            id={company.tickerSymbol}
+                            checked={selectedGics.has(company.tickerSymbol)}
+                            onCheckedChange={() => handleGicsToggle(company.tickerSymbol)}
+                          />
+                          <Label htmlFor={company.tickerSymbol} className="text-xs cursor-pointer">
+                            {company.tickerSymbol} - {company.companyName}
+                          </Label>
                         </div>
-
-                        {/* GICS Sub-Sectors */}
-                        <div>
-                          <Label className="text-sm font-medium">GICS Sub-Sectors</Label>
-                          <div className="mt-2 space-y-2 max-h-32 overflow-y-auto">
-                            {gicsSubSectors.map((subSector) => {
-                              const subSectorCompanies = gicsCompanies.filter(company => company.gicsSubCategory === subSector);
-                              const allSelected = subSectorCompanies.every(company => selectedGics.has(company.tickerSymbol));
-                              const someSelected = subSectorCompanies.some(company => selectedGics.has(company.tickerSymbol));
-                              
-                              return (
-                                <div key={subSector} className="space-y-1">
-                                  <div className="flex items-center space-x-2">
-                                    <Checkbox
-                                      checked={allSelected}
-                                      onCheckedChange={(checked) => {
-                                        const newSelected = new Set(selectedGics);
-                                        subSectorCompanies.forEach(company => {
-                                          if (checked) {
-                                            newSelected.add(company.tickerSymbol);
-                                          } else {
-                                            newSelected.delete(company.tickerSymbol);
-                                          }
-                                        });
-                                        setSelectedGics(newSelected);
-                                      }}
-                                    />
-                                    <Label className="text-sm font-medium">{subSector}</Label>
-                                  </div>
-                                  <div className="ml-6 space-y-1">
-                                    {subSectorCompanies.map((company) => (
-                                      <div key={company.tickerSymbol} className="flex items-center space-x-2">
-                                        <Checkbox
-                                          checked={selectedGics.has(company.tickerSymbol)}
-                                          onCheckedChange={() => handleGicsToggle(company.tickerSymbol)}
-                                        />
-                                        <Label className="text-sm">
-                                          {company.companyName} ({company.tickerSymbol})
-                                        </Label>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="pt-4">
-                        <p className="text-sm text-text-muted mb-2">
-                          Selected: {selectedGics.size} companies
-                        </p>
-                        <Button 
-                          onClick={handleUpdateSubscriptions}
-                          disabled={updateGicsLoading}
-                        >
-                          {updateGicsLoading ? 'Updating...' : 'Update Subscriptions'}
-                        </Button>
-                      </div>
-                    </>
-                  )}
-              </CardContent>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button 
+                      onClick={handleUpdateSubscriptions} 
+                      disabled={updateGicsLoading}
+                      size="sm"
+                      className="text-xs"
+                    >
+                      {updateGicsLoading ? 'Updating...' : 'Update Subscriptions'}
+                    </Button>
+                  </div>
+                </CardContent>
               )}
             </Card>
 
-            {/* Notification Settings */}
+            {/* Unified Preferences Section */}
             <Card className="bg-surface-primary border-border-default">
-              <CardHeader 
+              <CardHeader
                 className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
-                onClick={() => setNotificationsSectionOpen(!notificationsSectionOpen)}
+                onClick={() => setPreferencesSectionOpen(!preferencesSectionOpen)}
               >
-                <CardTitle className="flex items-center justify-between text-text-primary">
+                <CardTitle className="flex items-center justify-between text-text-primary text-sm">
                   <div className="flex items-center">
-                  <Bell className="mr-2 h-5 w-5 text-gold" />
-                  Notification Preferences
+                    <Palette className="mr-2 h-4 w-4 text-gold" />
+                    Preferences
                   </div>
-                  {notificationsSectionOpen ? (
-                    <ChevronDown className="h-5 w-5 text-gold" />
+                  {preferencesSectionOpen ? (
+                    <ChevronDown className="h-4 w-4 text-gold" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-gold" />
+                    <ChevronRight className="h-4 w-4 text-gold" />
                   )}
                 </CardTitle>
               </CardHeader>
-              {notificationsSectionOpen && (
-                <CardContent className="p-0">
-                  <div className="p-6">
-                    <NotificationPreferences />
+              {preferencesSectionOpen && (
+                <CardContent className="space-y-4 text-xs">
+                  {/* Notification Preferences */}
+                  <div className="space-y-3">
+                    <div className="flex items-center">
+                      <Bell className="mr-2 h-4 w-4 text-gold" />
+                      <Label className="text-xs font-semibold">Notification Preferences</Label>
+                    </div>
+                    <div className="space-y-2 pl-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-xs">Email Notifications</Label>
+                          <p className="text-xs text-text-muted">Receive email notifications for events</p>
+                        </div>
+                        <Switch
+                          checked={notificationPreferences.emailNotifications}
+                          onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, emailNotifications: checked }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-xs">Event Reminders</Label>
+                          <p className="text-xs text-text-muted">Get reminded about upcoming events</p>
+                        </div>
+                        <Switch
+                          checked={notificationPreferences.eventReminders}
+                          onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, eventReminders: checked }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-xs">RSVP Updates</Label>
+                          <p className="text-xs text-text-muted">Notifications for RSVP status changes</p>
+                        </div>
+                        <Switch
+                          checked={notificationPreferences.rsvpUpdates}
+                          onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, rsvpUpdates: checked }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Appearance Settings */}
+                  <div className="space-y-3">
+                    <div className="flex items-center">
+                      <Palette className="mr-2 h-4 w-4 text-gold" />
+                      <Label className="text-xs font-semibold">Appearance Settings</Label>
+                    </div>
+                    <div className="space-y-2 pl-6">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Theme</Label>
+                        <Select
+                          value={appearanceSettings.theme}
+                          onValueChange={(value) => handleAppearanceChange('theme', value)}
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="bloomberg">Bloomberg Terminal</SelectItem>
+                            <SelectItem value="classic">Classic</SelectItem>
+                            <SelectItem value="modern">Modern</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Color Scheme</Label>
+                        <Select
+                          value={appearanceSettings.colorScheme}
+                          onValueChange={(value) => handleAppearanceChange('colorScheme', value)}
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="dark">Dark</SelectItem>
+                            <SelectItem value="light">Light</SelectItem>
+                            <SelectItem value="auto">Auto</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Font Size</Label>
+                        <Select
+                          value={appearanceSettings.fontSize}
+                          onValueChange={(value) => handleAppearanceChange('fontSize', value)}
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="small">Small</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="large">Large</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Data Density</Label>
+                        <Select
+                          value={appearanceSettings.dataDensity}
+                          onValueChange={(value) => handleAppearanceChange('dataDensity', value)}
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="compact">Compact</SelectItem>
+                            <SelectItem value="comfortable">Comfortable</SelectItem>
+                            <SelectItem value="spacious">Spacious</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Accent Color</Label>
+                        <Select
+                          value={appearanceSettings.accentColor}
+                          onValueChange={(value) => handleAppearanceChange('accentColor', value)}
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="gold">Gold</SelectItem>
+                            <SelectItem value="blue">Blue</SelectItem>
+                            <SelectItem value="green">Green</SelectItem>
+                            <SelectItem value="purple">Purple</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Calendar Preferences */}
+                  <div className="space-y-3">
+                    <div className="flex items-center">
+                      <CalendarDays className="mr-2 h-4 w-4 text-gold" />
+                      <Label className="text-xs font-semibold">Calendar Preferences</Label>
+                    </div>
+                    <div className="space-y-2 pl-6">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Default View</Label>
+                        <Select
+                          value={calendarPreferences.defaultView}
+                          onValueChange={(value) => handleCalendarPreferenceChange('defaultView', value)}
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="week">Week View</SelectItem>
+                            <SelectItem value="month">Month View</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-xs">Show Event Categories</Label>
+                          <p className="text-xs text-text-muted">Display event type legend on calendar</p>
+                        </div>
+                        <Switch
+                          checked={calendarPreferences.showEventCategory}
+                          onCheckedChange={(checked) => handleCalendarPreferenceChange('showEventCategory', checked)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Default Event Filter</Label>
+                        <Select
+                          value={calendarPreferences.defaultEventFilter}
+                          onValueChange={(value) => handleCalendarPreferenceChange('defaultEventFilter', value)}
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Events</SelectItem>
+                            <SelectItem value="rsvp">My Events Only</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Default Sort</Label>
+                        <Select
+                          value={calendarPreferences.defaultSort}
+                          onValueChange={(value) => handleCalendarPreferenceChange('defaultSort', value)}
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="events">Most Events</SelectItem>
+                            <SelectItem value="alpha">Alphabetical</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Event View Preferences */}
+                  <div className="space-y-3">
+                    <div className="flex items-center">
+                      <CalendarDays className="mr-2 h-4 w-4 text-gold" />
+                      <Label className="text-xs font-semibold">Event View Preferences</Label>
+                    </div>
+                    <div className="space-y-2 pl-6">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Display Mode</Label>
+                        <Select
+                          value={eventViewPreferences.displayMode}
+                          onValueChange={(value) => handleEventViewPreferenceChange('displayMode', value)}
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="list">📋 Enhanced List View (Recommended)</SelectItem>
+                            <SelectItem value="compact">📊 Compact Table View</SelectItem>
+                            <SelectItem value="cards">🎴 Card View</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-xs">Compact Information</Label>
+                          <p className="text-xs text-text-muted">Use smaller text and tighter spacing</p>
+                        </div>
+                        <Switch
+                          checked={eventViewPreferences.compactMode}
+                          onCheckedChange={(checked) => handleEventViewPreferenceChange('compactMode', checked)}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-xs">Show Status Badges</Label>
+                          <p className="text-xs text-text-muted">Display timing and RSVP status badges</p>
+                        </div>
+                        <Switch
+                          checked={eventViewPreferences.showStatusBadges}
+                          onCheckedChange={(checked) => handleEventViewPreferenceChange('showStatusBadges', checked)}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-xs">Auto-refresh Events</Label>
+                          <p className="text-xs text-text-muted">Automatically refresh every 5 minutes</p>
+                        </div>
+                        <Switch
+                          checked={eventViewPreferences.autoRefresh}
+                          onCheckedChange={(checked) => handleEventViewPreferenceChange('autoRefresh', checked)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Save Button */}
+                  <div className="flex justify-end">
+                    <Button onClick={saveAppearanceSettings} size="sm" className="text-xs">
+                      Save All Preferences
+                    </Button>
                   </div>
                 </CardContent>
               )}
@@ -902,479 +1122,143 @@ const Settings: React.FC = () => {
                 className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
                 onClick={() => setSecuritySectionOpen(!securitySectionOpen)}
               >
-                <CardTitle className="flex items-center justify-between text-text-primary">
+                <CardTitle className="flex items-center justify-between text-text-primary text-sm">
                   <div className="flex items-center">
-                  <Shield className="mr-2 h-5 w-5 text-gold" />
-                  Security
+                    <Shield className="mr-2 h-4 w-4 text-gold" />
+                    Security Settings
                   </div>
                   {securitySectionOpen ? (
-                    <ChevronDown className="h-5 w-5 text-gold" />
+                    <ChevronDown className="h-4 w-4 text-gold" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-gold" />
+                    <ChevronRight className="h-4 w-4 text-gold" />
                   )}
                 </CardTitle>
               </CardHeader>
               {securitySectionOpen && (
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Change Password</Label>
-                  <div className="flex gap-2">
-                    <Input type="password" placeholder="New password" className="flex-1" />
-                    <Button variant="outline">Update</Button>
+                <CardContent className="space-y-3 text-xs">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Two-Factor Authentication</Label>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-text-muted">Add an extra layer of security to your account</p>
+                      </div>
+                      <Button variant="outline" size="sm" className="text-xs">
+                        Enable 2FA
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Two-Factor Authentication</Label>
-                    <p className="text-sm text-text-muted">Add an extra layer of security to your account</p>
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label className="text-xs">Password</Label>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-text-muted">Change your account password</p>
+                      </div>
+                      <Button variant="outline" size="sm" className="text-xs">
+                        Change Password
+                      </Button>
+                    </div>
                   </div>
-                  <Button variant="outline">Enable 2FA</Button>
-                </div>
-              </CardContent>
+                </CardContent>
               )}
             </Card>
 
             {/* User Management */}
-            <Card className="bg-surface-primary border-border-default">
-              <CardHeader 
-                className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
-                onClick={() => setUserManagementSectionOpen(!userManagementSectionOpen)}
-              >
-                <CardTitle className="flex items-center justify-between text-text-primary">
-                  <div className="flex items-center">
-                  <Users className="mr-2 h-5 w-5 text-gold" />
-                  User Management
-                  </div>
-                  {userManagementSectionOpen ? (
-                    <ChevronDown className="h-5 w-5 text-gold" />
-                  ) : (
-                    <ChevronRight className="h-5 w-5 text-gold" />
-                  )}
-                </CardTitle>
-              </CardHeader>
-              {userManagementSectionOpen && (
-              <CardContent className="space-y-4">
-                  {/* Current User Info */}
-                  <div className="space-y-4">
-                    <div className="border border-border-default rounded-lg p-4 bg-surface-secondary">
-                      <h4 className="font-semibold text-gold mb-3">Current User Information</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-text-muted">Name</Label>
-                          <p className="text-text-primary">
-                            {profile?.first_name && profile?.last_name 
-                              ? `${profile.first_name} ${profile.last_name}`
-                              : 'Not set'
-                            }
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-text-muted">Email</Label>
-                          <p className="text-text-primary">{user?.email || 'Not available'}</p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-text-muted">Role</Label>
-                          <p className="text-text-primary">
-                            {profile?.role 
-                              ? profile.role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-                              : 'Not set'
-                            }
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-text-muted">Company</Label>
-                          <p className="text-text-primary">
-                            {companies.find(c => c.companyID === profile?.company_id)?.companyName || 'Not assigned'}
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-text-muted">Company Location</Label>
-                          <p className="text-text-primary">
-                            {companies.find(c => c.companyID === profile?.company_id)?.location || 'Not set'}
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-text-muted">User ID</Label>
-                          <p className="text-text-primary font-mono text-sm">{user?.id || 'Not available'}</p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-text-muted">Profile Created</Label>
-                          <p className="text-text-primary">
-                            {profile?.created_at 
-                              ? new Date(profile.created_at).toLocaleDateString()
-                              : 'Not available'
-                            }
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-text-muted">Last Updated</Label>
-                          <p className="text-text-primary">
-                            {profile?.updated_at 
-                              ? new Date(profile.updated_at).toLocaleDateString()
-                              : 'Not available'
-                            }
-                          </p>
-                        </div>
-                      </div>
+            {userProfile?.role === 'IR_ADMIN' && (
+              <Card className="bg-surface-primary border-border-default">
+                <CardHeader 
+                  className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
+                  onClick={() => setUserManagementSectionOpen(!userManagementSectionOpen)}
+                >
+                  <CardTitle className="flex items-center justify-between text-text-primary text-sm">
+                    <div className="flex items-center">
+                      <Users className="mr-2 h-4 w-4 text-gold" />
+                      User Management
                     </div>
-                  </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Manage Users</Label>
-                    <p className="text-sm text-text-muted">View, invite, and manage user accounts</p>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button 
-                      variant="outline"
-                      onClick={() => setInviteDialogOpen(true)}
-                      disabled={!userProfile}
-                      className="bg-gold hover:bg-gold-hover text-background"
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Invite User
-                    </Button>
-                    <Link to="/users">
-                      <Button variant="outline">Manage Users</Button>
-                    </Link>
-                  </div>
-                </div>
-              </CardContent>
-              )}
-            </Card>
-
-            {/* Appearance Settings */}
-            <Card className="bg-surface-primary border-border-default">
-              <CardHeader 
-                className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
-                onClick={() => setAppearanceSectionOpen(!appearanceSectionOpen)}
-              >
-                <CardTitle className="flex items-center justify-between text-text-primary">
-                  <div className="flex items-center">
-                  <Palette className="mr-2 h-5 w-5 text-gold" />
-                  Appearance
-                  </div>
-                  {appearanceSectionOpen ? (
-                    <ChevronDown className="h-5 w-5 text-gold" />
-                  ) : (
-                    <ChevronRight className="h-5 w-5 text-gold" />
-                  )}
-                </CardTitle>
-              </CardHeader>
-              {appearanceSectionOpen && (
-              <CardContent className="space-y-6">
-                {/* Theme Selection */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-base font-medium">Theme</Label>
-                    <p className="text-sm text-text-muted">Choose your preferred visual theme</p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div 
-                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                        appearanceSettings.theme === 'bloomberg' 
-                          ? 'border-gold bg-gold/10' 
-                          : 'border-border-default hover:border-gold/50'
-                      }`}
-                      onClick={() => handleAppearanceChange('theme', 'bloomberg')}
-                    >
-                      <div className="flex items-center space-x-2 mb-2">
-                        <div className="w-3 h-3 bg-gold rounded-full"></div>
-                        <span className="font-medium">Bloomberg Terminal</span>
-                      </div>
-                      <p className="text-xs text-text-muted">Professional terminal-inspired design with gold accents</p>
-                    </div>
-                    <div 
-                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                        appearanceSettings.theme === 'classic' 
-                          ? 'border-gold bg-gold/10' 
-                          : 'border-border-default hover:border-gold/50'
-                      }`}
-                      onClick={() => handleAppearanceChange('theme', 'classic')}
-                    >
-                      <div className="flex items-center space-x-2 mb-2">
-                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                        <span className="font-medium">Classic</span>
-                      </div>
-                      <p className="text-xs text-text-muted">Traditional business application design</p>
-                    </div>
-                    <div 
-                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                        appearanceSettings.theme === 'modern' 
-                          ? 'border-gold bg-gold/10' 
-                          : 'border-border-default hover:border-gold/50'
-                      }`}
-                      onClick={() => handleAppearanceChange('theme', 'modern')}
-                    >
-                      <div className="flex items-center space-x-2 mb-2">
-                        <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                        <span className="font-medium">Modern</span>
-                      </div>
-                      <p className="text-xs text-text-muted">Clean, minimalist design with modern aesthetics</p>
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Color Scheme */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-base font-medium">Color Scheme</Label>
-                    <p className="text-sm text-text-muted">Select your preferred color mode</p>
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <Select 
-                      value={appearanceSettings.colorScheme} 
-                      onValueChange={(value) => handleAppearanceChange('colorScheme', value)}
-                    >
-                      <SelectTrigger className="w-48">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="dark">Dark Mode</SelectItem>
-                        <SelectItem value="light">Light Mode</SelectItem>
-                        <SelectItem value="auto">Auto (System)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Layout Options */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-base font-medium">Layout & Display</Label>
-                    <p className="text-sm text-text-muted">Customize how information is displayed</p>
-                  </div>
-                  <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                        <Label>Terminal Mode</Label>
-                    <p className="text-sm text-text-muted">Use Bloomberg terminal-inspired design</p>
-                  </div>
-                      <Switch 
-                        checked={appearanceSettings.terminalMode}
-                        onCheckedChange={(checked) => handleAppearanceChange('terminalMode', checked)}
-                      />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Compact View</Label>
-                    <p className="text-sm text-text-muted">Display more information in less space</p>
-                  </div>
-                      <Switch 
-                        checked={appearanceSettings.compactView}
-                        onCheckedChange={(checked) => handleAppearanceChange('compactView', checked)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>Show Grid Lines</Label>
-                        <p className="text-sm text-text-muted">Display grid lines in data tables</p>
-                      </div>
-                      <Switch 
-                        checked={appearanceSettings.showGridLines}
-                        onCheckedChange={(checked) => handleAppearanceChange('showGridLines', checked)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>Show Animations</Label>
-                        <p className="text-sm text-text-muted">Enable smooth transitions and animations</p>
-                      </div>
-                      <Switch 
-                        checked={appearanceSettings.showAnimations}
-                        onCheckedChange={(checked) => handleAppearanceChange('showAnimations', checked)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>Show Tooltips</Label>
-                        <p className="text-sm text-text-muted">Display helpful tooltips on hover</p>
-                      </div>
-                      <Switch 
-                        checked={appearanceSettings.showTooltips}
-                        onCheckedChange={(checked) => handleAppearanceChange('showTooltips', checked)}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Typography */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-base font-medium">Typography</Label>
-                    <p className="text-sm text-text-muted">Adjust text size and readability</p>
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <Select 
-                      value={appearanceSettings.fontSize} 
-                      onValueChange={(value) => handleAppearanceChange('fontSize', value)}
-                    >
-                      <SelectTrigger className="w-48">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="small">Small</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="large">Large</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Data Density */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-base font-medium">Data Density</Label>
-                    <p className="text-sm text-text-muted">Control spacing and information density</p>
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <Select 
-                      value={appearanceSettings.dataDensity} 
-                      onValueChange={(value) => handleAppearanceChange('dataDensity', value)}
-                    >
-                      <SelectTrigger className="w-48">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="compact">Compact</SelectItem>
-                        <SelectItem value="normal">Normal</SelectItem>
-                        <SelectItem value="spacious">Spacious</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Accent Color */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-base font-medium">Accent Color</Label>
-                    <p className="text-sm text-text-muted">Choose your preferred accent color</p>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    {['gold', 'blue', 'green', 'purple'].map((color) => (
-                      <div
-                        key={color}
-                        className={`w-8 h-8 rounded-full cursor-pointer border-2 transition-all ${
-                          appearanceSettings.accentColor === color 
-                            ? 'border-white scale-110' 
-                            : 'border-border-default hover:scale-105'
-                        }`}
-                        style={{
-                          backgroundColor: color === 'gold' ? '#D4AF37' : 
-                                         color === 'blue' ? '#3B82F6' : 
-                                         color === 'green' ? '#10B981' : '#8B5CF6'
-                        }}
-                        onClick={() => handleAppearanceChange('accentColor', color)}
-                        title={color.charAt(0).toUpperCase() + color.slice(1)}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Auto-refresh Settings */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-base font-medium">Auto-refresh</Label>
-                    <p className="text-sm text-text-muted">Configure automatic data updates</p>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>Enable Auto-refresh</Label>
-                        <p className="text-sm text-text-muted">Automatically refresh data at regular intervals</p>
-                      </div>
-                      <Switch 
-                        checked={appearanceSettings.autoRefresh}
-                        onCheckedChange={(checked) => handleAppearanceChange('autoRefresh', checked)}
-                      />
-                    </div>
-                    {appearanceSettings.autoRefresh && (
-                      <div className="flex items-center space-x-4">
-                        <Label>Refresh Interval:</Label>
-                        <Select 
-                          value={appearanceSettings.refreshInterval.toString()} 
-                          onValueChange={(value) => handleAppearanceChange('refreshInterval', parseInt(value))}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="15">15 seconds</SelectItem>
-                            <SelectItem value="30">30 seconds</SelectItem>
-                            <SelectItem value="60">1 minute</SelectItem>
-                            <SelectItem value="300">5 minutes</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    {userManagementSectionOpen ? (
+                      <ChevronDown className="h-4 w-4 text-gold" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-gold" />
                     )}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Save Button */}
-                <div className="flex justify-end">
-                  <Button onClick={saveAppearanceSettings}>
-                    Save Appearance Settings
-                  </Button>
-                </div>
-              </CardContent>
-              )}
-            </Card>
+                  </CardTitle>
+                </CardHeader>
+                {userManagementSectionOpen && (
+                  <CardContent className="space-y-3 text-xs">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Invite New User</Label>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-text-muted">Send invitation to new team member</p>
+                        </div>
+                        <Button 
+                          onClick={() => setInviteDialogOpen(true)} 
+                          size="sm"
+                          className="text-xs"
+                        >
+                          <Plus className="mr-1 h-3 w-3" />
+                          Invite User
+                        </Button>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="space-y-2">
+                      <Label className="text-xs">Manage Users</Label>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-text-muted">View and manage existing users</p>
+                        </div>
+                        <Button variant="outline" size="sm" className="text-xs" asChild>
+                          <Link to="/users">
+                            Manage Users
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            )}
 
             {/* Danger Zone */}
-            <Card className="bg-surface-primary border-error/20">
+            <Card className="bg-surface-primary border-border-default">
               <CardHeader 
                 className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
                 onClick={() => setDangerZoneSectionOpen(!dangerZoneSectionOpen)}
               >
-                <CardTitle className="flex items-center justify-between text-error">
+                <CardTitle className="flex items-center justify-between text-text-primary text-sm">
                   <div className="flex items-center">
-                  <Database className="mr-2 h-5 w-5" />
-                  Danger Zone
+                    <Shield className="mr-2 h-4 w-4 text-red-500" />
+                    Danger Zone
                   </div>
                   {dangerZoneSectionOpen ? (
-                    <ChevronDown className="h-5 w-5 text-error" />
+                    <ChevronDown className="h-4 w-4 text-red-500" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-error" />
+                    <ChevronRight className="h-4 w-4 text-red-500" />
                   )}
                 </CardTitle>
               </CardHeader>
               {dangerZoneSectionOpen && (
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-text-primary">Sign Out</Label>
-                    <p className="text-sm text-text-muted">Sign out from your current session</p>
+                <CardContent className="space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-xs text-error">Sign Out</Label>
+                      <p className="text-xs text-text-muted">Sign out of your current session</p>
+                    </div>
+                    <Button variant="outline" onClick={signOut} size="sm" className="text-xs">
+                      Sign Out
+                    </Button>
                   </div>
-                  <Button variant="outline" onClick={signOut}>
-                    Sign Out
-                  </Button>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-error">Delete Account</Label>
-                    <p className="text-sm text-text-muted">Permanently delete your account and all data</p>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-xs text-error">Delete Account</Label>
+                      <p className="text-xs text-text-muted">Permanently delete your account and all data</p>
+                    </div>
+                    <Button variant="danger" size="sm" className="text-xs">
+                      Delete Account
+                    </Button>
                   </div>
-                  <Button variant="danger">
-                    Delete Account
-                  </Button>
-                </div>
-              </CardContent>
+                </CardContent>
               )}
             </Card>
           </div>

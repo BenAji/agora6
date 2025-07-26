@@ -53,11 +53,11 @@ const CalendarPage: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventDetailsOpen, setEventDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isWeekView, setIsWeekView] = useState(false);
-  const [showLegend, setShowLegend] = useState(false);
-  const [showOnlyRSVP, setShowOnlyRSVP] = useState(true);
+  const [isWeekView, setIsWeekView] = useState(true); // Default to week view
+  const [showLegend, setShowLegend] = useState(false); // Default hide event category
+  const [showOnlyRSVP, setShowOnlyRSVP] = useState(false); // Default to all events
   const [isRSVPing, setIsRSVPing] = useState(false);
-  const [companySortMode, setCompanySortMode] = useState<'events' | 'alpha'>('events');
+  const [companySortMode, setCompanySortMode] = useState<'events' | 'alpha'>('events'); // Default sort by most events
   const [filterOpen, setFilterOpen] = useState(false);
   const [showCompaniesWithEventsOnly, setShowCompaniesWithEventsOnly] = useState(true);
   const [selectedGicsSector, setSelectedGicsSector] = useState<string | null>(null);
@@ -74,6 +74,24 @@ const CalendarPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [currentMonth, isWeekView, showOnlyRSVP]);  // Added showOnlyRSVP dependency
+
+  // Load calendar preferences on component mount
+  useEffect(() => {
+    const savedPreferences = localStorage.getItem('agora-calendar-preferences');
+    if (savedPreferences) {
+      try {
+        const preferences = JSON.parse(savedPreferences);
+        
+        // Apply calendar preferences
+        setIsWeekView(preferences.defaultView === 'week');
+        setShowLegend(preferences.showEventCategory);
+        setShowOnlyRSVP(preferences.defaultEventFilter === 'rsvp');
+        setCompanySortMode(preferences.defaultSort);
+      } catch (error) {
+        console.error('Error loading calendar preferences:', error);
+      }
+    }
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -592,7 +610,7 @@ const CalendarPage: React.FC = () => {
 
           {/* Search Results Preview */}
           {searchQuery && searchResults.length > 0 && (
-            <Card className="bg-surface-secondary border-border-default">
+            <Card className="bg-zinc-900 border-zinc-800">
               <CardContent className="p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gold">Search Results</span>
@@ -602,7 +620,7 @@ const CalendarPage: React.FC = () => {
                   {searchResults.slice(0, 5).map((event) => (
                     <div 
                       key={event.eventID}
-                      className="flex items-center gap-2 p-2 bg-surface-primary rounded hover:bg-surface-primary/80 cursor-pointer"
+                      className="flex items-center gap-2 p-2 bg-black rounded hover:bg-zinc-800 cursor-pointer"
                       onClick={() => {
                         setSelectedEvent(event);
                         setEventDetailsOpen(true);
@@ -628,7 +646,7 @@ const CalendarPage: React.FC = () => {
           )}
 
         {/* Compact Calendar Header */}
-        <div className="flex justify-between items-center bg-surface-primary p-2 border border-border-default">
+        <div className="flex justify-between items-center bg-black p-2 border border-zinc-800">
           <div className="flex items-center space-x-2">
             <Button 
               variant="ghost" 
@@ -662,7 +680,7 @@ const CalendarPage: React.FC = () => {
                 placeholder="Search events..."
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="pl-10 pr-8 h-8 text-sm bg-surface-secondary border-border-default"
+                className="pl-10 pr-8 h-8 text-sm bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-400"
               />
               {searchQuery && (
                 <Button
@@ -713,15 +731,15 @@ const CalendarPage: React.FC = () => {
                   <ChevronDown className="h-3 w-3 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 bg-surface-primary border border-border-default">
+              <DropdownMenuContent align="end" className="w-48 bg-black border border-zinc-800">
                 <DropdownMenuItem 
                   onClick={() => {
                     setSelectedDate(new Date());
                     setCurrentMonth(new Date());
                   }}
-                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                  className="flex items-center gap-2 cursor-pointer hover:bg-zinc-800 text-xs"
                 >
-                  <CalendarDays className="h-4 w-4" />
+                  <CalendarDays className="h-3 w-3" />
                   Go to Today (T)
                 </DropdownMenuItem>
                 
@@ -733,33 +751,33 @@ const CalendarPage: React.FC = () => {
                       description: "Calendar data updated",
                     });
                   }}
-                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                  className="flex items-center gap-2 cursor-pointer hover:bg-zinc-800 text-xs"
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  <RefreshCw className="h-3 w-3" />
                   Refresh Data (Ctrl+R)
                 </DropdownMenuItem>
                 
                 <DropdownMenuItem 
                   onClick={() => setShowLegend(!showLegend)}
-                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                  className="flex items-center gap-2 cursor-pointer hover:bg-zinc-800 text-xs"
                 >
-                  {showLegend ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showLegend ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                   {showLegend ? 'Hide' : 'Show'} Event Categories
                 </DropdownMenuItem>
                 
                 <DropdownMenuItem 
                   onClick={() => setFilterOpen(!filterOpen)}
-                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                  className="flex items-center gap-2 cursor-pointer hover:bg-zinc-800 text-xs"
                 >
-                  <Filter className="h-4 w-4" />
+                  <Filter className="h-3 w-3" />
                   Advanced Filters
                 </DropdownMenuItem>
                 
                 <DropdownMenuItem 
                   onClick={() => setCompanySortMode(companySortMode === 'events' ? 'alpha' : 'events')}
-                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                  className="flex items-center gap-2 cursor-pointer hover:bg-zinc-800 text-xs"
                 >
-                  <BarChart3 className="h-4 w-4" />
+                  <BarChart3 className="h-3 w-3" />
                   Sort: {companySortMode === 'events' ? 'Switch to A-Z' : 'Switch to Most Events'}
                 </DropdownMenuItem>
                 
@@ -773,9 +791,9 @@ const CalendarPage: React.FC = () => {
                       description: "Calendar export feature coming soon",
                     });
                   }}
-                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                  className="flex items-center gap-2 cursor-pointer hover:bg-zinc-800 text-xs"
                 >
-                  <Download className="h-4 w-4" />
+                  <Download className="h-3 w-3" />
                   Export Calendar
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -784,7 +802,7 @@ const CalendarPage: React.FC = () => {
               <PopoverTrigger asChild>
                 <span></span>
               </PopoverTrigger>
-              <PopoverContent className="w-64 p-4 space-y-3">
+              <PopoverContent className="w-64 p-4 space-y-3 bg-black border-zinc-800">
                 <div>
                   <label className="flex items-center gap-2 text-xs">
                     <input type="checkbox" checked={showCompaniesWithEventsOnly} onChange={e => setShowCompaniesWithEventsOnly(e.target.checked)} />
@@ -859,7 +877,7 @@ const CalendarPage: React.FC = () => {
         )}
 
         {/* Main Calendar Grid */}
-        <Card variant="terminal">
+        <Card variant="terminal" className="bg-black border-zinc-800">
           <CardContent className="p-0">
             {loading ? (
               <div className="flex items-center justify-center h-60">
@@ -881,11 +899,11 @@ const CalendarPage: React.FC = () => {
                 <div className="min-w-[900px] max-w-full">
                   {/* Header Row */}
                   <div className="grid border-b-2 border-gold/30" style={{ gridTemplateColumns: '100px repeat(auto-fit, minmax(80px, 1fr))' }}>
-                    <div className="px-2 py-3 font-bold text-gold border-r-2 border-gold/30 bg-gradient-to-r from-surface-secondary to-surface-secondary/70 text-xs shadow-sm">
+                    <div className="px-2 py-3 font-bold text-gold border-r-2 border-gold/30 bg-gradient-to-r from-zinc-900 to-black text-xs shadow-sm">
                       <div className="text-center">Company</div>
                     </div>
                     {getWeeksInMonth().map((week, weekIndex) => (
-                      <div key={weekIndex} className="grid grid-cols-7 border-r-2 border-gold/30 bg-gradient-to-b from-surface-secondary to-surface-secondary/70 shadow-sm">
+                      <div key={weekIndex} className="grid grid-cols-7 border-r-2 border-gold/30 bg-gradient-to-b from-zinc-900 to-black shadow-sm">
                         <div className="col-span-7 px-1 py-2 text-center text-xs font-bold text-gold border-b border-border-default bg-gradient-to-r from-gold/10 to-gold/5">
                           Week {getISOWeek(week.start)}
                         </div>
@@ -903,8 +921,8 @@ const CalendarPage: React.FC = () => {
 
                   {/* Company Rows */}
                   {filteredCompanies.map((company, companyIndex) => (
-                    <div key={company.companyID} className={`grid border-b border-border-default/50 hover:bg-surface-secondary/20 transition-colors ${companyIndex % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-primary/50'}`} style={{ gridTemplateColumns: '100px repeat(auto-fit, minmax(80px, 1fr))' }}>
-                       <div className="px-2 py-2 border-r-2 border-gold/30 font-medium text-text-primary bg-gradient-to-r from-surface-secondary/30 to-surface-secondary/10 shadow-sm">
+                    <div key={company.companyID} className={`grid border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${companyIndex % 2 === 0 ? 'bg-zinc-900' : 'bg-black'}`} style={{ gridTemplateColumns: '100px repeat(auto-fit, minmax(80px, 1fr))' }}>
+                       <div className="px-2 py-2 border-r-2 border-gold/30 font-medium text-text-primary bg-gradient-to-r from-zinc-800/50 to-black shadow-sm">
                          <div className="text-xs leading-tight font-semibold text-gold" title={`${company.tickerSymbol} - ${company.companyName}`}>
                            {company.tickerSymbol}
                          </div>
@@ -924,9 +942,9 @@ const CalendarPage: React.FC = () => {
                               <div
                                 key={dayIndex}
                                 className={`
-                                  min-h-[45px] p-1 border-r last:border-r-0 border-border-default/30 relative
-                                  transition-all duration-200 hover:bg-surface-secondary/60 cursor-pointer group
-                                  ${!isCurrentMonth ? 'bg-surface-secondary/10' : ''}
+                                  min-h-[45px] p-1 border-r last:border-r-0 border-zinc-700/30 relative
+                                  transition-all duration-200 hover:bg-zinc-700/60 cursor-pointer group
+                                  ${!isCurrentMonth ? 'bg-zinc-800/20' : ''}
                                   ${isDayToday ? 'bg-gradient-to-br from-gold/25 to-gold/15 border-gold/50 shadow-sm' : ''}
                                   ${selectedDate && isSameDay(day, selectedDate) ? 'bg-gold/10 border-gold/30' : ''}
                                   hover:shadow-sm
@@ -970,7 +988,7 @@ const CalendarPage: React.FC = () => {
 
         {/* Selected Day Events */}
         {selectedDate && (
-          <Card variant="terminal">
+          <Card variant="terminal" className="bg-black border-zinc-800">
             <CardHeader>
               <CardTitle className="text-gold">
                 Events for {format(selectedDate, 'EEEE, MMMM d, yyyy')}
@@ -985,7 +1003,7 @@ const CalendarPage: React.FC = () => {
                   {getEventsForDay(selectedDate).map((event) => (
                     <Card 
                       key={event.eventID} 
-                      className="bg-surface-secondary border-border-default cursor-pointer hover:bg-surface-secondary/80 transition-colors"
+                      className="bg-zinc-900 border-zinc-800 cursor-pointer hover:bg-zinc-800 transition-colors"
                       onClick={() => handleEventClick(event)}
                     >
                       <CardContent className="p-4">
@@ -1018,7 +1036,7 @@ const CalendarPage: React.FC = () => {
 
         {/* Event Details Dialog */}
         <Dialog open={eventDetailsOpen} onOpenChange={setEventDetailsOpen}>
-          <DialogContent className="max-w-2xl bg-surface-primary border border-border-default">
+          <DialogContent className="max-w-2xl bg-black border border-zinc-800">
             <DialogHeader>
               <DialogTitle className="text-gold text-xl">
                 {selectedEvent?.eventName}
@@ -1085,7 +1103,7 @@ const CalendarPage: React.FC = () => {
                 {selectedEvent.description && (
                   <div>
                     <div className="text-sm font-medium text-text-secondary mb-2">Description</div>
-                    <div className="text-text-primary bg-surface-secondary p-4 rounded-lg border border-border-default">
+                    <div className="text-text-primary bg-zinc-900 p-4 rounded-lg border border-zinc-800">
                       {selectedEvent.description}
                     </div>
                   </div>
@@ -1113,22 +1131,22 @@ const CalendarPage: React.FC = () => {
                           <ChevronDown className="ml-2 h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="center" className="bg-surface-primary border border-border-default z-50">
+                      <DropdownMenuContent align="center" className="bg-black border border-zinc-800 z-50">
                         <DropdownMenuItem 
                           onClick={() => handleRSVP('ACCEPTED')}
-                          className="text-success hover:bg-surface-secondary"
+                          className="text-success hover:bg-zinc-800"
                         >
                           Accept
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                           onClick={() => handleRSVP('DECLINED')}
-                          className="text-error hover:bg-surface-secondary"
+                          className="text-error hover:bg-zinc-800"
                         >
                           Decline
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                           onClick={() => handleRSVP('TENTATIVE')}
-                          className="text-warning hover:bg-surface-secondary"
+                          className="text-warning hover:bg-zinc-800"
                         >
                           Tentative
                         </DropdownMenuItem>
@@ -1153,16 +1171,16 @@ const CalendarPage: React.FC = () => {
         </Dialog>
 
         {/* Keyboard Shortcuts Help */}
-        <div className="mt-4 p-2 bg-surface-secondary/30 rounded border border-border-default">
+        <div className="mt-4 p-2 bg-zinc-900/50 rounded border border-zinc-800">
           <div className="text-xs text-text-muted text-center">
             <span className="font-medium text-gold">Keyboard shortcuts:</span> 
-            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">T</kbd> Today • 
-            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">N</kbd> Next • 
-            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">P</kbd> Previous • 
-            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">W</kbd> Week view • 
-            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">/</kbd> Search • 
-            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">Ctrl+R</kbd> Refresh •
-            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">Esc</kbd> Clear search
+            <kbd className="mx-1 px-1 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-xs">T</kbd> Today • 
+            <kbd className="mx-1 px-1 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-xs">N</kbd> Next • 
+            <kbd className="mx-1 px-1 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-xs">P</kbd> Previous • 
+            <kbd className="mx-1 px-1 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-xs">W</kbd> Week view • 
+            <kbd className="mx-1 px-1 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-xs">/</kbd> Search • 
+            <kbd className="mx-1 px-1 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-xs">Ctrl+R</kbd> Refresh •
+            <kbd className="mx-1 px-1 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-xs">Esc</kbd> Clear search
           </div>
         </div>
       </div>

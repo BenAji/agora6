@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '@/components/Layout';
 import EventCard from '@/components/EventCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Filter, Plus, TrendingUp, Calendar, Clock, MapPin, Building2, FileText } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Search, Plus, TrendingUp, Calendar, User, X, Grid3X3, List, Clock, Building2, MapPin, Eye, CheckCircle, XCircle, AlertCircle, Minus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -30,23 +31,32 @@ interface Event {
   rsvpStatus?: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'PENDING';
 }
 
+type FilterType = 'all' | 'upcoming' | 'my-events' | 'needs-response';
+type SortType = 'date' | 'name' | 'company';
+type ViewType = 'cards' | 'list' | 'compact';
+
 const Events: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [eventFilter, setEventFilter] = useState<'all' | 'upcoming' | 'past'>('upcoming');
-  const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
-  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
-  const [selectedTickerSymbols, setSelectedTickerSymbols] = useState<string[]>([]);
-  const [selectedGicsSectors, setSelectedGicsSectors] = useState<string[]>([]);
+  
+  // Set enhanced List view as default
+  const [activeFilter, setActiveFilter] = useState<FilterType>('upcoming');
+  const [sortBy, setSortBy] = useState<SortType>('date');
+  const [viewType, setViewType] = useState<ViewType>('list');
+  
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
   const [isRSVPing, setIsRSVPing] = useState(false);
   const [selectedEventIDs, setSelectedEventIDs] = useState<string[]>([]);
+  
   const { profile, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const canCreateEvents = profile?.role === 'IR_ADMIN';
+  const canBulkRSVP = selectedEventIDs.length > 0;
 
   useEffect(() => {
     fetchEvents();
@@ -90,168 +100,197 @@ const Events: React.FC = () => {
     }
   };
 
-  const filteredEvents = events.filter(event => {
-    // Search filter
-    const matchesSearch = event.eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  // Simplified filtering and sorting logic
+  const processedEvents = useMemo(() => {
+    let filtered = events;
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(event => 
+        event.eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       event.hostCompany?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      event.eventType.toLowerCase().includes(searchTerm.toLowerCase());
+        event.eventType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.tickerSymbol?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
     
-    // Event status filter (upcoming/past/all)
-    let matchesTimeFilter = true;
-    if (eventFilter === 'upcoming') {
-      const eventDate = new Date(event.startDate);
+    // Apply main filter
       const now = new Date();
-      matchesTimeFilter = eventDate >= now;
-    } else if (eventFilter === 'past') {
-      const eventDate = new Date(event.startDate);
-      const now = new Date();
-      matchesTimeFilter = eventDate < now;
-    }
-    
-    // Advanced filters
-    const matchesEventType = selectedEventTypes.length === 0 || selectedEventTypes.includes(event.eventType);
-    const matchesCompany = selectedCompanies.length === 0 || selectedCompanies.includes(event.hostCompany || '');
-    const matchesTickerSymbol = selectedTickerSymbols.length === 0 || selectedTickerSymbols.includes(event.tickerSymbol || '');
-    const matchesGicsSector = selectedGicsSectors.length === 0 || selectedGicsSectors.includes(event.gicsSector || '');
-    
-    return matchesSearch && matchesTimeFilter && matchesEventType && matchesCompany && matchesTickerSymbol && matchesGicsSector;
-  });
-
-  // Get unique filter options from events
-  const uniqueEventTypes = [...new Set(events.map(e => e.eventType).filter(Boolean))];
-  const uniqueCompanies = [...new Set(events.map(e => e.hostCompany).filter(Boolean))];
-  const uniqueTickerSymbols = [...new Set(events.map(e => e.tickerSymbol).filter(Boolean))];
-  const uniqueGicsSectors = [...new Set(events.map(e => e.gicsSector).filter(Boolean))];
-
-  const clearAllFilters = () => {
-    setSelectedEventTypes([]);
-    setSelectedCompanies([]);
-    setSelectedTickerSymbols([]);
-    setSelectedGicsSectors([]);
-  };
-
-  const handleViewDetails = (eventCard: any) => {
-    // Find the original event from our events array using the eventCard id
-    const originalEvent = events.find(e => e.eventID === eventCard.id);
-    if (originalEvent) {
-      setSelectedEvent(originalEvent);
-      setViewDetailsOpen(true);
-    }
-  };
-
-  const handleRSVPUpdate = () => {
-    fetchEvents(); // Refresh events to get updated RSVP status
-  };
-
-  const handleDetailRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
-    if (!profile || !selectedEvent) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to RSVP to events",
-        variant: "destructive",
-      });
-      return;
+    switch (activeFilter) {
+      case 'upcoming':
+        filtered = filtered.filter(event => new Date(event.startDate) >= now);
+        break;
+      case 'my-events':
+        filtered = filtered.filter(event => 
+          event.rsvpStatus && ['ACCEPTED', 'TENTATIVE'].includes(event.rsvpStatus)
+        );
+        break;
+      case 'needs-response':
+        filtered = filtered.filter(event => 
+          !event.rsvpStatus && new Date(event.startDate) >= now
+        );
+        break;
+      case 'all':
+      default:
+        // No additional filtering
+        break;
     }
 
-    setIsRSVPing(true);
-    try {
-      // Check if user already has an RSVP for this event
-      const { data: existingRSVP, error: fetchError } = await supabase
-        .from('rsvps')
-        .select('*')
-        .eq('eventID', selectedEvent.eventID)
-        .eq('userID', profile.id)
-        .maybeSingle();
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
-      if (existingRSVP) {
-        // Update existing RSVP
-        const { error: updateError } = await supabase
-          .from('rsvps')
-          .update({ 
-            status: status,
-            updatedAt: new Date().toISOString()
-          })
-          .eq('rsvpID', existingRSVP.rsvpID);
-
-        if (updateError) throw updateError;
-      } else {
-        // Create new RSVP
-        const { error: insertError } = await supabase
-          .from('rsvps')
-          .insert([{
-            eventID: selectedEvent.eventID,
-            userID: profile.id,
-            status: status
-          }]);
-
-        if (insertError) throw insertError;
-      }
-
-      toast({
-        title: "RSVP Updated",
-        description: `Your RSVP status has been set to ${status.toLowerCase()}`,
-      });
-
-      fetchEvents(); // Refresh events to get updated RSVP status
-    } catch (error) {
-      console.error('Error updating RSVP:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update RSVP. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsRSVPing(false);
+    // Apply sorting
+    switch (sortBy) {
+      case 'name':
+        filtered.sort((a, b) => a.eventName.localeCompare(b.eventName));
+        break;
+      case 'company':
+        filtered.sort((a, b) => (a.hostCompany || '').localeCompare(b.hostCompany || ''));
+        break;
+      case 'date':
+      default:
+        filtered.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+        break;
     }
+
+    return filtered;
+  }, [events, searchTerm, activeFilter, sortBy]);
+
+  // Get filter counts for display
+  const filterCounts = useMemo(() => {
+    const now = new Date();
+    return {
+      all: events.length,
+      upcoming: events.filter(e => new Date(e.startDate) >= now).length,
+      'my-events': events.filter(e => e.rsvpStatus && ['ACCEPTED', 'TENTATIVE'].includes(e.rsvpStatus)).length,
+      'needs-response': events.filter(e => !e.rsvpStatus && new Date(e.startDate) >= now).length,
+    };
+  }, [events]);
+
+  const clearSearch = () => {
+    setSearchTerm('');
   };
 
   const handleBulkRSVP = async (status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
     if (!profile || selectedEventIDs.length === 0) return;
-    setIsRSVPing(true);
+
     try {
-      for (const eventID of selectedEventIDs) {
-        // Check if RSVP exists
-        const { data: existingRSVP } = await supabase
-          .from('rsvps')
-          .select('rsvpID')
-          .eq('eventID', eventID)
-          .eq('userID', profile.id)
-          .maybeSingle();
-        if (existingRSVP) {
-          await supabase
-            .from('rsvps')
-            .update({ status, updatedAt: new Date().toISOString() })
-            .eq('rsvpID', existingRSVP.rsvpID);
-        } else {
-          await supabase
-            .from('rsvps')
-            .insert([{ eventID, userID: profile.id, status }]);
-        }
-      }
-      toast({ title: 'Bulk RSVP Updated', description: `Set ${status.toLowerCase()} for ${selectedEventIDs.length} events.` });
+      setIsRSVPing(true);
+      const rsvpPromises = selectedEventIDs.map(eventID =>
+        supabase.from('rsvps').upsert({
+          eventID,
+          userID: profile.id,
+          status,
+          rsvpDate: new Date().toISOString()
+        })
+      );
+
+      await Promise.all(rsvpPromises);
+
+      toast({
+        title: "RSVP Updated",
+        description: `Updated RSVP for ${selectedEventIDs.length} event(s) to ${status.toLowerCase()}`,
+      });
+
       setSelectedEventIDs([]);
       fetchEvents();
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to update RSVP for some events.', variant: 'destructive' });
+      console.error('Error updating RSVPs:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update RSVPs",
+        variant: "destructive",
+      });
     } finally {
       setIsRSVPing(false);
     }
   };
 
-  const isEventPast = (eventDate: string) => {
-    const event = new Date(eventDate);
-    const now = new Date();
-    return event < now;
+  const toggleEventSelection = (eventID: string) => {
+    setSelectedEventIDs(prev =>
+      prev.includes(eventID)
+        ? prev.filter(id => id !== eventID)
+        : [...prev, eventID]
+    );
   };
 
-  const canCreateEvents = profile?.role === 'IR_ADMIN';
-  const canBulkRSVP = profile?.role === 'ANALYST_MANAGER' || profile?.role === 'INVESTMENT_ANALYST';
+  const handleEventClick = (event: Event) => {
+    setSelectedEvent(event);
+    setViewDetailsOpen(true);
+  };
 
-  const getEventStatus = (startDate: string, endDate?: string): 'upcoming' | 'ongoing' | 'completed' => {
+  const handleQuickRSVP = async (eventID: string, status: 'ACCEPTED' | 'DECLINED' | 'TENTATIVE') => {
+    if (!profile) return;
+
+    try {
+      setIsRSVPing(true);
+      await supabase.from('rsvps').upsert({
+        eventID,
+        userID: profile.id,
+        status,
+        rsvpDate: new Date().toISOString()
+      });
+
+      toast({
+        title: "RSVP Updated",
+        description: `RSVP set to ${status.toLowerCase()}`,
+      });
+
+      // Update local state for immediate UI feedback
+      setEvents(prevEvents => 
+        prevEvents.map(event => 
+          event.eventID === eventID 
+            ? { ...event, rsvpStatus: status }
+            : event
+        )
+      );
+    } catch (error) {
+      console.error('Error updating RSVP:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update RSVP",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRSVPing(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = date.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays === -1) return 'Yesterday';
+    if (diffDays > 0 && diffDays <= 7) return `In ${diffDays} days`;
+    if (diffDays < 0 && diffDays >= -7) return `${Math.abs(diffDays)} days ago`;
+    
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const getRSVPIcon = (status?: string) => {
+    switch (status) {
+      case 'ACCEPTED': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'DECLINED': return <XCircle className="h-4 w-4 text-red-500" />;
+      case 'TENTATIVE': return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+      default: return <Minus className="h-4 w-4 text-gray-400" />;
+    }
+  };
+
+  // Get event timing status
+  const getEventTimingStatus = (startDate: string, endDate?: string) => {
     const now = new Date();
     const start = new Date(startDate);
     const end = endDate ? new Date(endDate) : start;
@@ -265,227 +304,322 @@ const Events: React.FC = () => {
     }
   };
 
+  // Get RSVP status badge
+  const getRSVPStatusBadge = (status?: string) => {
+    switch (status) {
+      case 'ACCEPTED':
+        return <Badge className="bg-green-100 text-green-800 border-green-200 text-xs px-1.5 py-0.5">Accepted</Badge>;
+      case 'DECLINED':
+        return <Badge className="bg-red-100 text-red-800 border-red-200 text-xs px-1.5 py-0.5">Declined</Badge>;
+      case 'TENTATIVE':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 text-xs px-1.5 py-0.5">Tentative</Badge>;
+      default:
+        return <Badge className="bg-gray-100 text-gray-600 border-gray-200 text-xs px-1.5 py-0.5">Pending</Badge>;
+    }
+  };
+
+  // Get event timing badge
+  const getEventTimingBadge = (startDate: string, endDate?: string) => {
+    const status = getEventTimingStatus(startDate, endDate);
+    switch (status) {
+      case 'upcoming':
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs px-1.5 py-0.5">Upcoming</Badge>;
+      case 'ongoing':
+        return <Badge className="bg-gold/20 text-amber-800 border-amber-200 text-xs px-1.5 py-0.5">Live</Badge>;
+      case 'completed':
+        return <Badge className="bg-gray-100 text-gray-600 border-gray-200 text-xs px-1.5 py-0.5">Completed</Badge>;
+    }
+  };
+
+  const renderCompactView = () => (
+    <Card className="bg-black border-zinc-800">
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-zinc-800 hover:bg-transparent">
+              <TableHead className="w-8 pl-4 text-gold">
+                <input
+                  type="checkbox"
+                  checked={selectedEventIDs.length === processedEvents.length && processedEvents.length > 0}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedEventIDs(processedEvents.map(event => event.eventID));
+                    } else {
+                      setSelectedEventIDs([]);
+                    }
+                  }}
+                  className="rounded border-zinc-600"
+                />
+              </TableHead>
+              <TableHead className="w-16 text-gold text-xs">RSVP</TableHead>
+              <TableHead className="min-w-[200px] text-gold text-xs">Event</TableHead>
+              <TableHead className="w-32 text-gold text-xs">Company</TableHead>
+              <TableHead className="w-24 text-gold text-xs">Ticker</TableHead>
+              <TableHead className="w-32 text-gold text-xs">Date</TableHead>
+              <TableHead className="w-20 text-gold text-xs">Time</TableHead>
+              <TableHead className="w-28 text-gold text-xs">Type</TableHead>
+              <TableHead className="w-32 text-gold text-xs">Location</TableHead>
+              <TableHead className="w-24 text-gold text-xs">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {processedEvents.map((event) => {
+              const isUpcoming = new Date(event.startDate) > new Date();
   return (
-    <Layout currentPage="events">
-      <div className="p-8 space-y-6">
-        {/* Events Header */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gold mb-2">Events</h1>
-            <p className="text-text-secondary">
-              Manage and track all investor relations events
-            </p>
+                <TableRow 
+                  key={event.eventID} 
+                  className="border-zinc-800 hover:bg-zinc-900/50 cursor-pointer"
+                  onClick={() => handleEventClick(event)}
+                >
+                  <TableCell className="pl-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedEventIDs.includes(event.eventID)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggleEventSelection(event.eventID);
+                      }}
+                      className="rounded border-zinc-600"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {getRSVPIcon(event.rsvpStatus)}
+                  </TableCell>
+                  <TableCell className="font-medium text-white text-xs">
+                    <div className="max-w-[200px] truncate">
+                      {event.eventName}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-zinc-300">
+                    <div className="max-w-[120px] truncate">
+                      {event.hostCompany}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-zinc-300">
+                    {event.tickerSymbol && (
+                      <Badge variant="outline" className="text-xs border-gold text-gold">
+                        {event.tickerSymbol}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    <div className={`${!isUpcoming ? 'text-zinc-500' : 'text-white'}`}>
+                      {formatDate(event.startDate)}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-zinc-300">
+                    {formatTime(event.startDate)}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    <Badge variant="secondary" className="text-xs bg-zinc-700 text-zinc-200 border-zinc-600">
+                      {event.eventType.replace('_', ' ')}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-zinc-300">
+                    <div className="max-w-[120px] truncate">
+                      {event.location}
           </div>
-          <Button variant="ghost" onClick={() => navigate('/dashboard')}>
-            <TrendingUp className="mr-2 h-4 w-4" />
-            Dashboard
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                      {isUpcoming && !event.rsvpStatus && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 w-5 p-0 text-green-600 hover:text-green-500"
+                            onClick={() => handleQuickRSVP(event.eventID, 'ACCEPTED')}
+                            title="Accept"
+                          >
+                            <CheckCircle className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 w-5 p-0 text-red-600 hover:text-red-500"
+                            onClick={() => handleQuickRSVP(event.eventID, 'DECLINED')}
+                            title="Decline"
+                          >
+                            <XCircle className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-5 w-5 p-0 text-zinc-400 hover:text-gold"
+                        onClick={() => handleEventClick(event)}
+                        title="View Details"
+                      >
+                        <Eye className="h-3 w-3" />
           </Button>
         </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
 
-        {/* Search and Filters */}
-        <Card variant="terminal">
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              <div className="flex gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-text-muted" />
-                  <Input 
-                    placeholder="Search events, companies, or types..." 
-                    className="pl-10"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+  const renderListView = () => (
+    <div className="space-y-1">
+      {processedEvents.map((event) => {
+        const isUpcoming = new Date(event.startDate) > new Date();
+        return (
+          <Card 
+            key={event.eventID} 
+            className="bg-black border-zinc-800 hover:bg-zinc-950 hover:border-zinc-700 cursor-pointer transition-all duration-200"
+            onClick={() => handleEventClick(event)}
+          >
+            <CardContent className="p-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2.5 flex-1">
+                  <input
+                    type="checkbox"
+                    checked={selectedEventIDs.includes(event.eventID)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      toggleEventSelection(event.eventID);
+                    }}
+                    className="rounded border-zinc-600 w-3 h-3"
                   />
-                </div>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="terminal">
-                      <Filter className="mr-2 h-4 w-4" />
-                      Filters
-                      {(selectedEventTypes.length + selectedCompanies.length + selectedTickerSymbols.length + selectedGicsSectors.length) > 0 && (
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {selectedEventTypes.length + selectedCompanies.length + selectedTickerSymbols.length + selectedGicsSectors.length}
+
+                  <div className="flex-1 min-w-0">
+                    {/* Row 1: Event Name + Primary Tags */}
+                    <div className="flex items-center space-x-2 mb-1">
+                      <h3 className="font-medium text-white truncate max-w-[280px] text-xs">
+                        {event.eventName}
+                      </h3>
+                      
+                      {/* Primary Status Tags - Inline with title */}
+                      <div className="flex items-center space-x-1.5">
+                        {event.tickerSymbol && (
+                          <Badge className="bg-gold/20 text-gold border-gold/40 text-[10px] px-1 py-0 font-medium leading-none">
+                            {event.tickerSymbol}
+                          </Badge>
+                        )}
+                        
+                        {/* Event Category */}
+                        <Badge className="bg-zinc-800 text-zinc-300 border-zinc-700 text-[10px] px-1 py-0 font-normal leading-none">
+                          {event.eventType.replace('_', ' ')}
                         </Badge>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80 bg-surface-primary border border-border-default p-4 max-h-96 overflow-y-auto">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-medium text-text-primary">Advanced Filters</h4>
-                        <Button variant="ghost" size="sm" onClick={clearAllFilters}>
-                          Clear All
-                        </Button>
+                        
+                        {/* Timing Status */}
+                        {(() => {
+                          const status = getEventTimingStatus(event.startDate, event.endDate);
+                          switch (status) {
+                            case 'upcoming':
+                              return <Badge className="bg-blue-900/40 text-blue-300 border-blue-800/50 text-[10px] px-1 py-0 font-normal leading-none">Upcoming</Badge>;
+                            case 'ongoing':
+                              return <Badge className="bg-amber-900/40 text-amber-300 border-amber-800/50 text-[10px] px-1 py-0 font-normal leading-none">Live</Badge>;
+                            case 'completed':
+                              return <Badge className="bg-zinc-700/40 text-zinc-400 border-zinc-600/50 text-[10px] px-1 py-0 font-normal leading-none">Done</Badge>;
+                          }
+                        })()}
+                        
+                        {/* RSVP Status */}
+                        {(() => {
+                          switch (event.rsvpStatus) {
+                            case 'ACCEPTED':
+                              return <Badge className="bg-green-900/40 text-green-300 border-green-800/50 text-[10px] px-1 py-0 font-normal leading-none">✓ Accepted</Badge>;
+                            case 'DECLINED':
+                              return <Badge className="bg-red-900/40 text-red-300 border-red-800/50 text-[10px] px-1 py-0 font-normal leading-none">✗ Declined</Badge>;
+                            case 'TENTATIVE':
+                              return <Badge className="bg-yellow-900/40 text-yellow-300 border-yellow-800/50 text-[10px] px-1 py-0 font-normal leading-none">? Tentative</Badge>;
+                            default:
+                              return <Badge className="bg-zinc-700/40 text-zinc-400 border-zinc-600/50 text-[10px] px-1 py-0 font-normal leading-none">○ Pending</Badge>;
+                          }
+                        })()}
                       </div>
-
-                      {/* Event Type Filter */}
-                      <div className="space-y-2">
-                        <h5 className="text-xs font-medium text-text-secondary">Event Type</h5>
-                        {uniqueEventTypes.map(type => (
-                          <div key={type} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`type-${type}`}
-                              checked={selectedEventTypes.includes(type)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedEventTypes([...selectedEventTypes, type]);
-                                } else {
-                                  setSelectedEventTypes(selectedEventTypes.filter(t => t !== type));
-                                }
-                              }}
-                            />
-                            <label htmlFor={`type-${type}`} className="text-xs text-text-primary">
-                              {type.replace('_', ' ')}
-                            </label>
                           </div>
-                        ))}
+
+                    {/* Row 2: Event Details */}
+                    <div className="flex items-center space-x-3 text-[10px] text-zinc-400">
+                      <div className="flex items-center space-x-1">
+                        <Building2 className="h-2.5 w-2.5 text-gold flex-shrink-0" />
+                        <span className="truncate max-w-[120px]">{event.hostCompany}</span>
                       </div>
 
-                      {/* Company Filter */}
-                      <div className="space-y-2">
-                        <h5 className="text-xs font-medium text-text-secondary">Company</h5>
-                        {uniqueCompanies.map(company => (
-                          <div key={company} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`company-${company}`}
-                              checked={selectedCompanies.includes(company)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedCompanies([...selectedCompanies, company]);
-                                } else {
-                                  setSelectedCompanies(selectedCompanies.filter(c => c !== company));
-                                }
-                              }}
-                            />
-                            <label htmlFor={`company-${company}`} className="text-xs text-text-primary">
-                              {company}
-                            </label>
-                          </div>
-                        ))}
+                      <div className="flex items-center space-x-1">
+                        <Calendar className="h-2.5 w-2.5 text-gold flex-shrink-0" />
+                        <span className={`whitespace-nowrap ${!isUpcoming ? 'text-zinc-500' : 'text-zinc-300'}`}>
+                          {formatDate(event.startDate)}
+                        </span>
                       </div>
 
-                      {/* Ticker Symbol Filter */}
-                      {uniqueTickerSymbols.length > 0 && (
-                        <div className="space-y-2">
-                          <h5 className="text-xs font-medium text-text-secondary">Ticker Symbol</h5>
-                          {uniqueTickerSymbols.map(ticker => (
-                            <div key={ticker} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`ticker-${ticker}`}
-                                checked={selectedTickerSymbols.includes(ticker)}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setSelectedTickerSymbols([...selectedTickerSymbols, ticker]);
-                                  } else {
-                                    setSelectedTickerSymbols(selectedTickerSymbols.filter(t => t !== ticker));
-                                  }
-                                }}
-                              />
-                              <label htmlFor={`ticker-${ticker}`} className="text-xs text-text-primary">
-                                {ticker}
-                              </label>
-                            </div>
-                          ))}
+                      <div className="flex items-center space-x-1">
+                        <Clock className="h-2.5 w-2.5 text-gold flex-shrink-0" />
+                        <span className="whitespace-nowrap text-zinc-300">{formatTime(event.startDate)}</span>
                         </div>
-                      )}
-
-                      {/* GICS Sector Filter */}
-                      {uniqueGicsSectors.length > 0 && (
-                        <div className="space-y-2">
-                          <h5 className="text-xs font-medium text-text-secondary">GICS Sector</h5>
-                          {uniqueGicsSectors.map(sector => (
-                            <div key={sector} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`gics-${sector}`}
-                                checked={selectedGicsSectors.includes(sector)}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setSelectedGicsSectors([...selectedGicsSectors, sector]);
-                                  } else {
-                                    setSelectedGicsSectors(selectedGicsSectors.filter(s => s !== sector));
-                                  }
-                                }}
-                              />
-                              <label htmlFor={`gics-${sector}`} className="text-xs text-text-primary">
-                                {sector}
-                              </label>
-                            </div>
-                          ))}
+                      
+                      <div className="flex items-center space-x-1">
+                        <MapPin className="h-2.5 w-2.5 text-gold flex-shrink-0" />
+                        <span className="truncate max-w-[100px] text-zinc-300">{event.location}</span>
                         </div>
-                      )}
                     </div>
-                  </PopoverContent>
-                </Popover>
-                {canCreateEvents && (
-                  <Button onClick={() => setCreateEventOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Event
-                  </Button>
-                )}
+                  </div>
               </div>
               
-              {/* Quick Filter Toggle */}
-              <div className="flex gap-2">
+                {/* Action Buttons - Compact */}
+                <div className="flex items-center space-x-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                  {isUpcoming && !event.rsvpStatus && (
+                    <>
                 <Button
-                  variant={eventFilter === 'upcoming' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setEventFilter('upcoming')}
+                        variant="ghost"
+                        className="text-green-500 hover:text-green-400 hover:bg-green-500/10 px-1.5 py-0.5 h-5 text-[10px] font-medium"
+                        onClick={() => handleQuickRSVP(event.eventID, 'ACCEPTED')}
+                        disabled={isRSVPing}
                 >
-                  Upcoming ({events.filter(e => new Date(e.startDate) >= new Date()).length})
+                        <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
+                        Accept
                 </Button>
                 <Button
-                  variant={eventFilter === 'past' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setEventFilter('past')}
+                        variant="ghost"
+                        className="text-red-500 hover:text-red-400 hover:bg-red-500/10 px-1.5 py-0.5 h-5 text-[10px] font-medium"
+                        onClick={() => handleQuickRSVP(event.eventID, 'DECLINED')}
+                        disabled={isRSVPing}
                 >
-                  Past ({events.filter(e => new Date(e.startDate) < new Date()).length})
+                        <XCircle className="h-2.5 w-2.5 mr-0.5" />
+                        Decline
                 </Button>
+                    </>
+                  )}
                 <Button
-                  variant={eventFilter === 'all' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setEventFilter('all')}
+                    variant="ghost"
+                    className="text-zinc-400 hover:text-gold hover:bg-gold/10 px-1.5 py-0.5 h-5 text-[10px] font-medium"
+                    onClick={() => handleEventClick(event)}
                 >
-                  All ({events.length})
+                    <Eye className="h-2.5 w-2.5 mr-0.5" />
+                    View
                 </Button>
               </div>
             </div>
           </CardContent>
         </Card>
+        );
+      })}
+          </div>
+  );
 
-        {/* Events Grid */}
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="text-text-secondary">Loading events...</div>
-          </div>
-        ) : filteredEvents.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-text-secondary mb-4">
-              {searchTerm ? 'No events match your search' : 'No events found'}
-            </div>
-            {canCreateEvents && !searchTerm && (
-              <Button onClick={() => setCreateEventOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Your First Event
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredEvents.map((event) => (
+  const renderCardView = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+      {processedEvents.map((event) => (
               <div key={event.eventID} className="relative">
                 {canBulkRSVP && (
+            <div className="absolute top-2 left-2 z-10">
                   <input
                     type="checkbox"
-                    className="absolute left-2 top-2 z-10 h-4 w-4"
                     checked={selectedEventIDs.includes(event.eventID)}
-                    disabled={isEventPast(event.startDate)}
-                    onChange={e => {
-                      if (e.target.checked) {
-                        setSelectedEventIDs([...selectedEventIDs, event.eventID]);
-                      } else {
-                        setSelectedEventIDs(selectedEventIDs.filter(id => id !== event.eventID));
-                      }
-                    }}
-                  />
+                onChange={() => toggleEventSelection(event.eventID)}
+                className="rounded border-zinc-600"
+              />
+            </div>
                 )}
                 <EventCard 
                   event={{
@@ -500,150 +634,217 @@ const Events: React.FC = () => {
                     }),
                     location: event.location || 'TBD',
                     attendees: 0,
-                    status: getEventStatus(event.startDate, event.endDate),
+              status: new Date(event.startDate) > new Date() ? 'upcoming' : 'completed',
                     rsvpStatus: event.rsvpStatus?.toLowerCase() as 'accepted' | 'declined' | 'tentative' | 'pending' | undefined,
                     description: event.description,
                     startDate: event.startDate,
                     endDate: event.endDate
                   }}
-                  onViewDetails={handleViewDetails}
-                  onRSVPUpdate={handleRSVPUpdate}
+            onViewDetails={() => handleEventClick(event)}
+            onRSVPUpdate={fetchEvents}
                 />
               </div>
             ))}
           </div>
+  );
+
+  return (
+    <Layout currentPage="events">
+      <div className="px-6 py-4 space-y-4 bg-black min-h-screen">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gold">Investment Events</h1>
+            <p className="text-sm text-zinc-400">
+              {processedEvents.length} of {events.length} events • {filterCounts['needs-response']} need response
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {canCreateEvents && (
+              <Button onClick={() => setCreateEventOpen(true)} size="sm" className="bg-gold text-black hover:bg-gold/90">
+                <Plus className="mr-2 h-4 w-4" />
+                New Event
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Search and Filter Controls */}
+        <Card className="bg-black border-zinc-800">
+          <CardContent className="p-4 space-y-4">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-500" />
+              <Input 
+                placeholder="Search events, companies, tickers..." 
+                className="pl-10 pr-10 bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {searchTerm && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearSearch}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 text-zinc-400 hover:text-gold"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+
+            {/* Filter and Sort Row */}
+            <div className="flex items-center justify-between gap-4">
+              {/* Filter Buttons */}
+              <div className="flex gap-2">
+                {[
+                  { key: 'upcoming' as FilterType, label: 'Upcoming', count: filterCounts.upcoming },
+                  { key: 'needs-response' as FilterType, label: 'Need Response', count: filterCounts['needs-response'] },
+                  { key: 'my-events' as FilterType, label: 'My Events', count: filterCounts['my-events'] },
+                  { key: 'all' as FilterType, label: 'All', count: filterCounts.all },
+                ].map(filter => (
+                  <Button
+                    key={filter.key}
+                    variant={activeFilter === filter.key ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setActiveFilter(filter.key)}
+                    className={`${
+                      activeFilter === filter.key 
+                        ? 'bg-gold text-black hover:bg-gold/90' 
+                        : 'border-zinc-700 text-zinc-300 hover:text-gold hover:border-gold'
+                    }`}
+                  >
+                    {filter.label} ({filter.count})
+                  </Button>
+                ))}
+              </div>
+
+              {/* Sort Control */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-zinc-500">Sort by:</span>
+                <Select value={sortBy} onValueChange={(value: SortType) => setSortBy(value)}>
+                  <SelectTrigger className="w-32 bg-zinc-900 border-zinc-700 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-700">
+                    <SelectItem value="date" className="text-white hover:bg-zinc-800">Date</SelectItem>
+                    <SelectItem value="name" className="text-white hover:bg-zinc-800">Name</SelectItem>
+                    <SelectItem value="company" className="text-white hover:bg-zinc-800">Company</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Events Display - Enhanced List View Only */}
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="text-sm text-zinc-400">Loading events...</div>
+          </div>
+        ) : processedEvents.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-sm text-zinc-400 mb-3">
+              {searchTerm ? `No events found for "${searchTerm}"` : 'No events found for this filter'}
+            </div>
+            {searchTerm && (
+              <Button variant="outline" size="sm" onClick={clearSearch} className="border-zinc-700 text-zinc-300 hover:text-gold hover:border-gold">
+                Clear Search
+              </Button>
+            )}
+          </div>
+        ) : (
+          renderListView()
         )}
 
-        {canBulkRSVP && selectedEventIDs.length > 0 && (
-          <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-surface-primary border border-gold rounded-lg shadow-lg flex items-center gap-4 px-6 py-3">
-            <span className="text-xs text-gold font-semibold">Bulk RSVP for {selectedEventIDs.length} events:</span>
-            <Button size="sm" className="text-success border-success" variant="outline" onClick={() => handleBulkRSVP('ACCEPTED')}>Accept</Button>
-            <Button size="sm" className="text-error border-error" variant="outline" onClick={() => handleBulkRSVP('DECLINED')}>Decline</Button>
-            <Button size="sm" className="text-warning border-warning" variant="outline" onClick={() => handleBulkRSVP('TENTATIVE')}>Tentative</Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelectedEventIDs([])}>Cancel</Button>
+        {/* Bulk RSVP Bar */}
+        {canBulkRSVP && (
+          <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-black border border-zinc-700 rounded-lg shadow-lg px-4 py-3 z-50">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-zinc-400">
+                {selectedEventIDs.length} selected
+              </span>
+              <Separator orientation="vertical" className="h-4 bg-zinc-700" />
+              <Button
+                size="sm"
+                onClick={() => handleBulkRSVP('ACCEPTED')}
+                disabled={isRSVPing}
+                className="bg-gold text-black hover:bg-gold/90"
+              >
+                Accept All
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleBulkRSVP('DECLINED')}
+                disabled={isRSVPing}
+                className="border-zinc-700 text-zinc-300 hover:text-gold hover:border-gold"
+              >
+                Decline All
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedEventIDs([])}
+                className="text-zinc-400 hover:text-gold"
+              >
+                Clear
+              </Button>
+            </div>
           </div>
         )}
 
-        {/* Event Details Modal */}
+        {/* Create Event Dialog */}
+        <CreateEventDialog
+          open={createEventOpen}
+          onOpenChange={setCreateEventOpen}
+          onEventCreated={fetchEvents}
+        />
+
+        {/* Event Details Dialog */}
         <Dialog open={viewDetailsOpen} onOpenChange={setViewDetailsOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="bg-black border-zinc-700 max-w-2xl">
             <DialogHeader>
-              <DialogTitle className="text-gold">{selectedEvent?.eventName}</DialogTitle>
+              <DialogTitle className="text-gold">Event Details</DialogTitle>
             </DialogHeader>
             {selectedEvent && (
-              <div className="space-y-6">
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="text-gold border-gold">
-                    {selectedEvent.eventType?.replace('_', ' ')}
-                  </Badge>
-                  {selectedEvent.rsvpStatus && (
-                    <Badge variant="outline" className="text-success border-success">
-                      RSVP: {selectedEvent.rsvpStatus}
-                    </Badge>
-                  )}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">{selectedEvent.eventName}</h3>
+                  <p className="text-sm text-zinc-400">{selectedEvent.hostCompany}</p>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center text-sm">
-                      <Building2 className="mr-2 h-4 w-4 text-gold" />
-                      <span className="text-text-secondary">Company:</span>
-                      <span className="ml-2 text-text-primary">{selectedEvent.hostCompany}</span>
-                    </div>
-                    
-                    <div className="flex items-center text-sm">
-                      <Calendar className="mr-2 h-4 w-4 text-gold" />
-                      <span className="text-text-secondary">Date:</span>
-                      <span className="ml-2 text-text-primary">{new Date(selectedEvent.startDate).toLocaleDateString()}</span>
-                    </div>
-                    
-                    <div className="flex items-center text-sm">
-                      <Clock className="mr-2 h-4 w-4 text-gold" />
-                      <span className="text-text-secondary">Time:</span>
-                      <span className="ml-2 text-text-primary">{new Date(selectedEvent.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-gold">Type:</span>
+                    <p className="text-zinc-300">{selectedEvent.eventType}</p>
                   </div>
-                  
-                  <div className="space-y-3">
-                    <div className="flex items-center text-sm">
-                      <MapPin className="mr-2 h-4 w-4 text-gold" />
-                      <span className="text-text-secondary">Location:</span>
-                      <span className="ml-2 text-text-primary">{selectedEvent.location}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                {selectedEvent.description && (
-                  <div className="space-y-2">
-                    <div className="flex items-center text-sm font-medium text-text-primary">
-                      <FileText className="mr-2 h-4 w-4 text-gold" />
-                      Description
-                    </div>
-                    <p className="text-sm text-text-secondary leading-relaxed pl-6">
-                      {selectedEvent.description}
+                  <div>
+                    <span className="font-medium text-gold">Date:</span>
+                    <p className="text-zinc-300">
+                      {new Date(selectedEvent.startDate).toLocaleDateString()}
                     </p>
                   </div>
-                )}
-
-                {/* RSVP Actions */}
-                {!isEventPast(selectedEvent.startDate) && user && (
-                  <div className="border-t border-border-default pt-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-text-primary">RSVP to this event:</span>
-                      <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          className="text-success border-success hover:bg-success hover:text-black"
-                          onClick={() => handleDetailRSVP('ACCEPTED')}
-                          disabled={isRSVPing}
-                        >
-                          Accept
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          className="text-error border-error hover:bg-error hover:text-white"
-                          onClick={() => handleDetailRSVP('DECLINED')}
-                          disabled={isRSVPing}
-                        >
-                          Decline
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          className="text-warning border-warning hover:bg-warning hover:text-black"
-                          onClick={() => handleDetailRSVP('TENTATIVE')}
-                          disabled={isRSVPing}
-                        >
-                          Tentative
-                        </Button>
-                      </div>
-                    </div>
+                  <div>
+                    <span className="font-medium text-gold">Time:</span>
+                    <p className="text-zinc-300">
+                      {new Date(selectedEvent.startDate).toLocaleTimeString()}
+                    </p>
                   </div>
-                )}
-
-                {isEventPast(selectedEvent.startDate) && (
-                  <div className="border-t border-border-default pt-4">
-                    <div className="text-center">
-                      <Badge variant="outline" className="text-text-muted border-text-muted">
-                        This event has ended
-                      </Badge>
+                  <div>
+                    <span className="font-medium text-gold">Location:</span>
+                    <p className="text-zinc-300">{selectedEvent.location}</p>
+                  </div>
                     </div>
+                {selectedEvent.description && (
+                  <div>
+                    <span className="font-medium text-gold">Description:</span>
+                    <p className="text-sm text-zinc-300 mt-2">{selectedEvent.description}</p>
                   </div>
                 )}
               </div>
             )}
           </DialogContent>
         </Dialog>
-
-        {canCreateEvents && (
-          <CreateEventDialog 
-            open={createEventOpen} 
-            onOpenChange={setCreateEventOpen}
-            onEventCreated={fetchEvents}
-          />
-        )}
       </div>
     </Layout>
   );
