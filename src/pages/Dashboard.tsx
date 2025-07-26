@@ -128,8 +128,8 @@ const Dashboard: React.FC = () => {
                   <CardContent>
                     <ResponsiveContainer width="100%" height={250}>
                       <BarChart data={eventsPerCompany} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                        <XAxis dataKey="name" stroke="#FFD700" tick={{ fill: '#FFD700', fontSize: 12 }} interval={0} angle={-20} textAnchor="end" height={60} />
-                        <YAxis stroke="#FFD700" tick={{ fill: '#FFD700', fontSize: 12 }} />
+                                    <XAxis dataKey="name" stroke="#B8860B" tick={{ fill: '#B8860B', fontSize: 12 }} interval={0} angle={-20} textAnchor="end" height={60} />
+            <YAxis stroke="#B8860B" tick={{ fill: '#B8860B', fontSize: 12 }} />
                         <Bar dataKey="value" fill="#22c55e" />
                         <RechartsTooltip />
                       </BarChart>

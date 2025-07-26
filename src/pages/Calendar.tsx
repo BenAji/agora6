@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,7 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight, Eye, EyeOff, Clock, MapPin, Building2, ChevronDown } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { ChevronLeft, ChevronRight, Download, Filter, CalendarDays, ToggleLeft, ToggleRight, Eye, EyeOff, Clock, MapPin, Building2, ChevronDown, Search, TrendingUp, Users, BarChart3, RefreshCw, Timer, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -60,6 +63,8 @@ const CalendarPage: React.FC = () => {
   const [selectedGicsSector, setSelectedGicsSector] = useState<string | null>(null);
   const [selectedGicsSubSector, setSelectedGicsSubSector] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Event[]>([]);
   const { profile, user } = useAuth();
   const { toast } = useToast();
 
@@ -69,6 +74,61 @@ const CalendarPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [currentMonth, isWeekView, showOnlyRSVP]);  // Added showOnlyRSVP dependency
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in input fields
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      switch (e.key.toLowerCase()) {
+        case 't':
+          setSelectedDate(new Date());
+          setCurrentMonth(new Date());
+          break;
+        case 'n':
+          if (isWeekView) {
+            setCurrentMonth(addWeeks(currentMonth, 1));
+          } else {
+            setCurrentMonth(addMonths(currentMonth, 1));
+          }
+          break;
+        case 'p':
+          if (isWeekView) {
+            setCurrentMonth(subWeeks(currentMonth, 1));
+          } else {
+            setCurrentMonth(subMonths(currentMonth, 1));
+          }
+          break;
+        case 'w':
+          setIsWeekView(!isWeekView);
+          break;
+        case 'r':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            fetchData();
+            toast({
+              title: "Refreshed",
+              description: "Calendar data updated",
+            });
+          }
+          break;
+        case '/':
+          e.preventDefault();
+          // Focus search input
+          const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
+          if (searchInput) searchInput.focus();
+          break;
+        case 'escape':
+          setSearchQuery('');
+          setSearchResults([]);
+          break;
+      }
+    };
+
+         window.addEventListener('keydown', handleKeyPress);
+     return () => window.removeEventListener('keydown', handleKeyPress);
+   }, [currentMonth, isWeekView, toast]);
 
   const fetchData = async () => {
     try {
@@ -196,7 +256,7 @@ const CalendarPage: React.FC = () => {
   };
 
   const getEventsForDay = (day: Date) => {
-    return events.filter(event => isSameDay(new Date(event.startDate), day));
+    return filteredAndSearchedEvents.filter(event => isSameDay(new Date(event.startDate), day));
   };
 
   const getWeeksInMonth = () => {
@@ -484,11 +544,89 @@ const CalendarPage: React.FC = () => {
     );
   }
 
-  
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    if (query.length === 0) {
+      setSearchResults([]);
+      return;
+    }
+    const results = events.filter(event => 
+      event.eventName.toLowerCase().includes(query.toLowerCase()) ||
+      event.hostCompany.toLowerCase().includes(query.toLowerCase()) ||
+      event.location?.toLowerCase().includes(query.toLowerCase())
+    );
+    setSearchResults(results);
+  };
+
+  const filteredAndSearchedEvents = useMemo(() => {
+    let currentEvents = [...events];
+
+    if (showOnlyRSVP) {
+      currentEvents = currentEvents.filter(event => getRSVPStatus(event.eventID) === 'ACCEPTED');
+    }
+
+    if (selectedGicsSector) {
+      currentEvents = currentEvents.filter(event => event.companyID && companies.find(c => c.companyID === event.companyID)?.gicsSector === selectedGicsSector);
+    }
+    if (selectedGicsSubSector) {
+      currentEvents = currentEvents.filter(event => event.companyID && companies.find(c => c.companyID === event.companyID)?.gicsSubCategory === selectedGicsSubSector);
+    }
+    if (selectedCompany) {
+      currentEvents = currentEvents.filter(event => event.companyID === selectedCompany);
+    }
+    if (searchQuery) {
+      currentEvents = currentEvents.filter(event => 
+        event.eventName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.hostCompany.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.location?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    return currentEvents;
+  }, [events, showOnlyRSVP, selectedGicsSector, selectedGicsSubSector, selectedCompany, searchQuery]);
 
   return (
     <Layout currentPage="calendar">
-      <div className="p-2 space-y-2">
+      <div className="p-2 space-y-3">
+
+
+          {/* Search Results Preview */}
+          {searchQuery && searchResults.length > 0 && (
+            <Card className="bg-surface-secondary border-border-default">
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gold">Search Results</span>
+                  <span className="text-xs text-text-muted">{searchResults.length} found</span>
+                </div>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {searchResults.slice(0, 5).map((event) => (
+                    <div 
+                      key={event.eventID}
+                      className="flex items-center gap-2 p-2 bg-surface-primary rounded hover:bg-surface-primary/80 cursor-pointer"
+                      onClick={() => {
+                        setSelectedEvent(event);
+                        setEventDetailsOpen(true);
+                      }}
+                    >
+                      <Badge className={getEventTypeColor(event.eventType)}>
+                        {event.eventType.replace('_', ' ')}
+                      </Badge>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-text-primary truncate">{event.eventName}</div>
+                        <div className="text-xs text-text-muted">{event.hostCompany} • {format(new Date(event.startDate), 'MMM d, h:mm a')}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {searchResults.length > 5 && (
+                    <div className="text-xs text-text-muted text-center pt-1">
+                      +{searchResults.length - 5} more results
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
         {/* Compact Calendar Header */}
         <div className="flex justify-between items-center bg-surface-primary p-2 border border-border-default">
           <div className="flex items-center space-x-2">
@@ -516,6 +654,29 @@ const CalendarPage: React.FC = () => {
             </Button>
           </div>
 
+          {/* Search Bar */}
+          <div className="flex items-center space-x-2 flex-1 max-w-md mx-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-text-muted" />
+              <Input
+                placeholder="Search events..."
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="pl-10 pr-8 h-8 text-sm bg-surface-secondary border-border-default"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleSearch('')}
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 text-text-muted hover:text-text-primary"
+                >
+                  ×
+                </Button>
+              )}
+            </div>
+          </div>
+
           <div className="flex items-center space-x-1">
             <span className="text-xs text-text-secondary">Month</span>
             <Button
@@ -541,31 +702,84 @@ const CalendarPage: React.FC = () => {
             </Button>
           </div>
 
-          <div className="flex items-center space-x-1 mr-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`text-xs h-6 px-2 ${companySortMode === 'events' ? 'text-gold bg-gold/10' : 'text-text-secondary hover:bg-surface-secondary'}`}
-              onClick={() => setCompanySortMode(companySortMode === 'events' ? 'alpha' : 'events')}
-            >
-              {companySortMode === 'events' ? 'Sort: Most Events' : 'Sort: A-Z'}
-            </Button>
-          </div>
+
 
           <div className="flex items-center space-x-1">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="text-gold hover:bg-surface-secondary text-xs h-6 px-2"
-              onClick={() => setShowLegend(!showLegend)}
-            >
-              {showLegend ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
-              Event Category
-            </Button>
-            <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2" onClick={() => setFilterOpen(!filterOpen)}>
-              <Filter className="h-3 w-3 mr-1" />
-              Filter
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
+                  <Filter className="h-3 w-3 mr-1" />
+                  Actions
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 bg-surface-primary border border-border-default">
+                <DropdownMenuItem 
+                  onClick={() => {
+                    setSelectedDate(new Date());
+                    setCurrentMonth(new Date());
+                  }}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                >
+                  <CalendarDays className="h-4 w-4" />
+                  Go to Today (T)
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem 
+                  onClick={() => {
+                    fetchData();
+                    toast({
+                      title: "Refreshed",
+                      description: "Calendar data updated",
+                    });
+                  }}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh Data (Ctrl+R)
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem 
+                  onClick={() => setShowLegend(!showLegend)}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                >
+                  {showLegend ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showLegend ? 'Hide' : 'Show'} Event Categories
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem 
+                  onClick={() => setFilterOpen(!filterOpen)}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                >
+                  <Filter className="h-4 w-4" />
+                  Advanced Filters
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem 
+                  onClick={() => setCompanySortMode(companySortMode === 'events' ? 'alpha' : 'events')}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Sort: {companySortMode === 'events' ? 'Switch to A-Z' : 'Switch to Most Events'}
+                </DropdownMenuItem>
+                
+                <Separator className="my-1" />
+                
+                <DropdownMenuItem 
+                  onClick={() => {
+                    // Export functionality placeholder
+                    toast({
+                      title: "Export",
+                      description: "Calendar export feature coming soon",
+                    });
+                  }}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-secondary"
+                >
+                  <Download className="h-4 w-4" />
+                  Export Calendar
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Popover open={filterOpen} onOpenChange={setFilterOpen}>
               <PopoverTrigger asChild>
                 <span></span>
@@ -614,10 +828,6 @@ const CalendarPage: React.FC = () => {
                 </div>
               </PopoverContent>
             </Popover>
-            <Button variant="ghost" size="sm" className="text-gold hover:bg-surface-secondary text-xs h-6 px-2">
-              <Download className="h-3 w-3 mr-1" />
-              Export
-            </Button>
           </div>
         </div>
 
@@ -715,9 +925,11 @@ const CalendarPage: React.FC = () => {
                                 key={dayIndex}
                                 className={`
                                   min-h-[45px] p-1 border-r last:border-r-0 border-border-default/30 relative
-                                  transition-all duration-200 hover:bg-surface-secondary/40 cursor-pointer
+                                  transition-all duration-200 hover:bg-surface-secondary/60 cursor-pointer group
                                   ${!isCurrentMonth ? 'bg-surface-secondary/10' : ''}
-                                  ${isDayToday ? 'bg-gradient-to-br from-gold/20 to-gold/10 border-gold/50' : ''}
+                                  ${isDayToday ? 'bg-gradient-to-br from-gold/25 to-gold/15 border-gold/50 shadow-sm' : ''}
+                                  ${selectedDate && isSameDay(day, selectedDate) ? 'bg-gold/10 border-gold/30' : ''}
+                                  hover:shadow-sm
                                 `}
                                 onClick={() => setSelectedDate(day)}
                               >
@@ -729,7 +941,7 @@ const CalendarPage: React.FC = () => {
                                         <Badge
                                           key={event.eventID}
                                           variant="secondary"
-                                          className={`w-full max-w-full truncate whitespace-nowrap cursor-pointer hover:opacity-90 transition-all text-[8px] leading-tight flex items-center gap-1 ${getEventTypeColor(event.eventType)} ${rsvpStatus === 'ACCEPTED' ? 'ring-1 ring-success shadow-sm' : ''} ${rsvpStatus === 'DECLINED' ? 'ring-1 ring-error shadow-sm' : ''} ${rsvpStatus === 'TENTATIVE' ? 'ring-1 ring-warning shadow-sm' : ''} hover:shadow-md hover:scale-[1.02]`}
+                                          className={`group w-full max-w-full truncate whitespace-nowrap cursor-pointer transition-all duration-200 text-[8px] leading-tight flex items-center gap-1 ${getEventTypeColor(event.eventType)} ${rsvpStatus === 'ACCEPTED' ? 'ring-2 ring-success shadow-md' : ''} ${rsvpStatus === 'DECLINED' ? 'ring-2 ring-error shadow-md' : ''} ${rsvpStatus === 'TENTATIVE' ? 'ring-2 ring-warning shadow-md' : ''} hover:shadow-lg hover:scale-105 hover:z-10 relative transform-gpu`}
                                           title={`${event.eventName} – ${format(new Date(event.startDate), 'h:mm a')}${rsvpStatus ? ` (${rsvpStatus})` : ''} – Click for details`}
                                           onClick={e => { e.stopPropagation(); handleEventClick(event); }}
                                         >
@@ -939,6 +1151,20 @@ const CalendarPage: React.FC = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Keyboard Shortcuts Help */}
+        <div className="mt-4 p-2 bg-surface-secondary/30 rounded border border-border-default">
+          <div className="text-xs text-text-muted text-center">
+            <span className="font-medium text-gold">Keyboard shortcuts:</span> 
+            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">T</kbd> Today • 
+            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">N</kbd> Next • 
+            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">P</kbd> Previous • 
+            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">W</kbd> Week view • 
+            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">/</kbd> Search • 
+            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">Ctrl+R</kbd> Refresh •
+            <kbd className="mx-1 px-1 py-0.5 bg-surface-primary border border-border-default rounded text-xs">Esc</kbd> Clear search
+          </div>
+        </div>
       </div>
     </Layout>
   );

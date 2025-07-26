@@ -53,7 +53,7 @@ const Users: React.FC = () => {
         supabase
           .from('profiles')
           .select('*')
-          .order('created_at', { ascending: false }),
+          .order('createdAt', { ascending: false }),
         supabase
           .from('user_companies')
           .select('companyID, companyName')

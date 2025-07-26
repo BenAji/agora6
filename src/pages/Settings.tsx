@@ -106,6 +106,23 @@ const Settings: React.FC = () => {
   const [dangerZoneSectionOpen, setDangerZoneSectionOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
+  // Appearance settings state
+  const [appearanceSettings, setAppearanceSettings] = useState({
+    theme: 'bloomberg', // 'bloomberg', 'classic', 'modern'
+    terminalMode: true,
+    compactView: false,
+    dataDensity: 'normal', // 'compact', 'normal', 'spacious'
+    colorScheme: 'dark', // 'dark', 'light', 'auto'
+    fontSize: 'medium', // 'small', 'medium', 'large'
+    showGridLines: true,
+    showAnimations: true,
+    accentColor: 'gold', // 'gold', 'blue', 'green', 'purple'
+    sidebarCollapsed: false,
+    showTooltips: true,
+    autoRefresh: true,
+    refreshInterval: 30, // seconds
+  });
+
   // When a company is selected, set the location if available
   useEffect(() => {
     const selected = companies.find(c => c.companyID === selectedCompanyId);
@@ -122,9 +139,15 @@ const Settings: React.FC = () => {
       fetchProfile();
       fetchCompanies();
       fetchGicsCompanies();
-      fetchUserSubscriptions();
     }
   }, [user]);
+
+  // Fetch user subscriptions after profile is loaded
+  useEffect(() => {
+    if (userProfile) {
+      fetchUserSubscriptions();
+    }
+  }, [userProfile]);
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -205,7 +228,7 @@ const Settings: React.FC = () => {
   };
 
   const fetchUserSubscriptions = async () => {
-    if (!user) return;
+    if (!user || !userProfile) return;
     
     try {
       const { data, error } = await supabase
@@ -347,6 +370,118 @@ const Settings: React.FC = () => {
       setUpdateGicsLoading(false);
     }
   };
+
+  const handleAppearanceChange = (key: string, value: any) => {
+    setAppearanceSettings(prev => ({
+      ...prev,
+      [key]: value
+    }));
+    
+    // Apply changes immediately for certain settings
+    if (key === 'theme' || key === 'colorScheme' || key === 'fontSize') {
+      applyAppearanceSettings({
+        ...appearanceSettings,
+        [key]: value
+      });
+    }
+  };
+
+  const applyAppearanceSettings = (settings: typeof appearanceSettings) => {
+    // Apply theme classes to document
+    document.documentElement.className = '';
+    document.documentElement.classList.add(`theme-${settings.theme}`);
+    document.documentElement.classList.add(`color-scheme-${settings.colorScheme}`);
+    document.documentElement.classList.add(`font-size-${settings.fontSize}`);
+    document.documentElement.classList.add(`data-density-${settings.dataDensity}`);
+    document.documentElement.classList.add(`accent-${settings.accentColor}`);
+    
+    // Apply conditional classes
+    if (settings.terminalMode) {
+      document.documentElement.classList.add('terminal-mode');
+    }
+    
+    if (settings.compactView) {
+      document.documentElement.classList.add('compact-view');
+    }
+    
+    if (!settings.showAnimations) {
+      document.documentElement.classList.add('no-animations');
+    }
+    
+    if (!settings.showGridLines) {
+      document.documentElement.classList.add('no-grid-lines');
+    }
+    
+    // Handle auto color scheme
+    if (settings.colorScheme === 'auto') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const isDark = mediaQuery.matches;
+      document.documentElement.classList.add(`color-scheme-${isDark ? 'dark' : 'light'}`);
+      
+      // Listen for system theme changes
+      mediaQuery.addEventListener('change', (e) => {
+        document.documentElement.classList.remove('color-scheme-dark', 'color-scheme-light');
+        document.documentElement.classList.add(`color-scheme-${e.matches ? 'dark' : 'light'}`);
+      });
+    }
+    
+    // Store in localStorage for persistence
+    localStorage.setItem('agora-appearance', JSON.stringify(settings));
+    
+    toast({
+      title: "Appearance Updated",
+      description: "Your appearance settings have been applied",
+    });
+  };
+
+  const saveAppearanceSettings = async () => {
+    try {
+      // Save to database if user is logged in
+      if (user) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            // Store appearance settings as JSON in a custom field
+            // This would require adding a preferences column to the profiles table
+          })
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      }
+      
+      // Always save to localStorage
+      localStorage.setItem('agora-appearance', JSON.stringify(appearanceSettings));
+      
+      toast({
+        title: "Success",
+        description: "Appearance settings saved successfully",
+      });
+      
+      // Collapse the appearance card after successful save
+      setAppearanceSectionOpen(false);
+    } catch (error) {
+      console.error('Error saving appearance settings:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save appearance settings",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Load appearance settings on component mount
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('agora-appearance');
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        setAppearanceSettings(parsed);
+        applyAppearanceSettings(parsed);
+      } catch (error) {
+        console.error('Error loading appearance settings:', error);
+      }
+    }
+  }, []);
 
   // Group GICS companies by sector
   const gicsSectors = Array.from(new Set(gicsCompanies.map(company => company.gicsSector))).sort();
@@ -928,21 +1063,273 @@ const Settings: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               {appearanceSectionOpen && (
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
+                {/* Theme Selection */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Theme</Label>
+                    <p className="text-sm text-text-muted">Choose your preferred visual theme</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div 
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                        appearanceSettings.theme === 'bloomberg' 
+                          ? 'border-gold bg-gold/10' 
+                          : 'border-border-default hover:border-gold/50'
+                      }`}
+                      onClick={() => handleAppearanceChange('theme', 'bloomberg')}
+                    >
+                      <div className="flex items-center space-x-2 mb-2">
+                        <div className="w-3 h-3 bg-gold rounded-full"></div>
+                        <span className="font-medium">Bloomberg Terminal</span>
+                      </div>
+                      <p className="text-xs text-text-muted">Professional terminal-inspired design with gold accents</p>
+                    </div>
+                    <div 
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                        appearanceSettings.theme === 'classic' 
+                          ? 'border-gold bg-gold/10' 
+                          : 'border-border-default hover:border-gold/50'
+                      }`}
+                      onClick={() => handleAppearanceChange('theme', 'classic')}
+                    >
+                      <div className="flex items-center space-x-2 mb-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                        <span className="font-medium">Classic</span>
+                      </div>
+                      <p className="text-xs text-text-muted">Traditional business application design</p>
+                    </div>
+                    <div 
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                        appearanceSettings.theme === 'modern' 
+                          ? 'border-gold bg-gold/10' 
+                          : 'border-border-default hover:border-gold/50'
+                      }`}
+                      onClick={() => handleAppearanceChange('theme', 'modern')}
+                    >
+                      <div className="flex items-center space-x-2 mb-2">
+                        <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                        <span className="font-medium">Modern</span>
+                      </div>
+                      <p className="text-xs text-text-muted">Clean, minimalist design with modern aesthetics</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Color Scheme */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Color Scheme</Label>
+                    <p className="text-sm text-text-muted">Select your preferred color mode</p>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <Select 
+                      value={appearanceSettings.colorScheme} 
+                      onValueChange={(value) => handleAppearanceChange('colorScheme', value)}
+                    >
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dark">Dark Mode</SelectItem>
+                        <SelectItem value="light">Light Mode</SelectItem>
+                        <SelectItem value="auto">Auto (System)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Layout Options */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Layout & Display</Label>
+                    <p className="text-sm text-text-muted">Customize how information is displayed</p>
+                  </div>
+                  <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>Terminal Theme</Label>
+                        <Label>Terminal Mode</Label>
                     <p className="text-sm text-text-muted">Use Bloomberg terminal-inspired design</p>
                   </div>
-                  <Switch defaultChecked />
+                      <Switch 
+                        checked={appearanceSettings.terminalMode}
+                        onCheckedChange={(checked) => handleAppearanceChange('terminalMode', checked)}
+                      />
                 </div>
-                <Separator />
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Compact View</Label>
                     <p className="text-sm text-text-muted">Display more information in less space</p>
                   </div>
-                  <Switch />
+                      <Switch 
+                        checked={appearanceSettings.compactView}
+                        onCheckedChange={(checked) => handleAppearanceChange('compactView', checked)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Show Grid Lines</Label>
+                        <p className="text-sm text-text-muted">Display grid lines in data tables</p>
+                      </div>
+                      <Switch 
+                        checked={appearanceSettings.showGridLines}
+                        onCheckedChange={(checked) => handleAppearanceChange('showGridLines', checked)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Show Animations</Label>
+                        <p className="text-sm text-text-muted">Enable smooth transitions and animations</p>
+                      </div>
+                      <Switch 
+                        checked={appearanceSettings.showAnimations}
+                        onCheckedChange={(checked) => handleAppearanceChange('showAnimations', checked)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Show Tooltips</Label>
+                        <p className="text-sm text-text-muted">Display helpful tooltips on hover</p>
+                      </div>
+                      <Switch 
+                        checked={appearanceSettings.showTooltips}
+                        onCheckedChange={(checked) => handleAppearanceChange('showTooltips', checked)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Typography */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Typography</Label>
+                    <p className="text-sm text-text-muted">Adjust text size and readability</p>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <Select 
+                      value={appearanceSettings.fontSize} 
+                      onValueChange={(value) => handleAppearanceChange('fontSize', value)}
+                    >
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="small">Small</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="large">Large</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Data Density */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Data Density</Label>
+                    <p className="text-sm text-text-muted">Control spacing and information density</p>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <Select 
+                      value={appearanceSettings.dataDensity} 
+                      onValueChange={(value) => handleAppearanceChange('dataDensity', value)}
+                    >
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="compact">Compact</SelectItem>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="spacious">Spacious</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Accent Color */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Accent Color</Label>
+                    <p className="text-sm text-text-muted">Choose your preferred accent color</p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    {['gold', 'blue', 'green', 'purple'].map((color) => (
+                      <div
+                        key={color}
+                        className={`w-8 h-8 rounded-full cursor-pointer border-2 transition-all ${
+                          appearanceSettings.accentColor === color 
+                            ? 'border-white scale-110' 
+                            : 'border-border-default hover:scale-105'
+                        }`}
+                        style={{
+                          backgroundColor: color === 'gold' ? '#D4AF37' : 
+                                         color === 'blue' ? '#3B82F6' : 
+                                         color === 'green' ? '#10B981' : '#8B5CF6'
+                        }}
+                        onClick={() => handleAppearanceChange('accentColor', color)}
+                        title={color.charAt(0).toUpperCase() + color.slice(1)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Auto-refresh Settings */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Auto-refresh</Label>
+                    <p className="text-sm text-text-muted">Configure automatic data updates</p>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Enable Auto-refresh</Label>
+                        <p className="text-sm text-text-muted">Automatically refresh data at regular intervals</p>
+                      </div>
+                      <Switch 
+                        checked={appearanceSettings.autoRefresh}
+                        onCheckedChange={(checked) => handleAppearanceChange('autoRefresh', checked)}
+                      />
+                    </div>
+                    {appearanceSettings.autoRefresh && (
+                      <div className="flex items-center space-x-4">
+                        <Label>Refresh Interval:</Label>
+                        <Select 
+                          value={appearanceSettings.refreshInterval.toString()} 
+                          onValueChange={(value) => handleAppearanceChange('refreshInterval', parseInt(value))}
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="15">15 seconds</SelectItem>
+                            <SelectItem value="30">30 seconds</SelectItem>
+                            <SelectItem value="60">1 minute</SelectItem>
+                            <SelectItem value="300">5 minutes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Save Button */}
+                <div className="flex justify-end">
+                  <Button onClick={saveAppearanceSettings}>
+                    Save Appearance Settings
+                  </Button>
                 </div>
               </CardContent>
               )}

@@ -54,7 +54,7 @@ const sendSMS = async (to: string, message: string) => {
 const generateEmailTemplate = (events: Event[], userName: string, daysBefore: number) => {
   const eventListHtml = events.map(event => `
     <div style="border: 1px solid #333; margin: 10px 0; padding: 15px; background-color: #1a1a1a; border-radius: 4px;">
-      <h3 style="color: #FFD700; margin: 0 0 10px 0;">${event.eventName}</h3>
+              <h3 style="color: #B8860B; margin: 0 0 10px 0;">${event.eventName}</h3>
       <p style="color: #cccccc; margin: 5px 0;"><strong>Company:</strong> ${event.hostCompany}</p>
       <p style="color: #cccccc; margin: 5px 0;"><strong>Type:</strong> ${event.eventType.replace(/_/g, ' ')}</p>
       <p style="color: #cccccc; margin: 5px 0;"><strong>Date:</strong> ${new Date(event.startDate).toLocaleDateString()} at ${new Date(event.startDate).toLocaleTimeString()}</p>
@@ -73,11 +73,11 @@ const generateEmailTemplate = (events: Event[], userName: string, daysBefore: nu
     <body style="font-family: Arial, sans-serif; background-color: #000000; color: #ffffff; margin: 0; padding: 20px;">
       <div style="max-width: 600px; margin: 0 auto;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #FFD700; margin-bottom: 5px;">AGORA</h1>
+          <h1 style="color: #B8860B; margin-bottom: 5px;">AGORA</h1>
           <p style="color: #cccccc; margin: 0;">Bloomberg-Style IR Platform</p>
         </div>
         
-        <h2 style="color: #FFD700;">Hello ${userName},</h2>
+        <h2 style="color: #B8860B;">Hello ${userName},</h2>
         <p style="color: #cccccc; line-height: 1.6;">
           You have ${events.length} upcoming ${events.length === 1 ? 'event' : 'events'} 
           in the next ${daysBefore} ${daysBefore === 1 ? 'day' : 'days'} based on your notification preferences:

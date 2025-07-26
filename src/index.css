@@ -18,20 +18,20 @@
     --surface-tertiary: 0 0% 16%;             /* Elevated surfaces */
     
     /* Bloomberg Gold Accents */
-    --accent-gold: 45 100% 50%;               /* Bloomberg signature gold */
-    --accent-gold-hover: 45 100% 55%;         /* Lighter gold for hover states */
-    --accent-gold-muted: 45 100% 35%;         /* Darker gold for subtle elements */
+    --accent-gold: 43 74% 45%;                /* Brighter deep gold leaning towards brown */
+    --accent-gold-hover: 43 74% 40%;          /* Slightly darker brown-gold for hover states */
+    --accent-gold-muted: 43 74% 30%;          /* Darker for subtle elements */
     
     /* Text Hierarchy */
     --text-primary: 0 0% 100%;                /* Primary white text */
     --text-secondary: 0 0% 80%;               /* Secondary light grey */
     --text-muted: 0 0% 60%;                   /* Muted grey for less important text */
-    --text-accent: 45 100% 50%;               /* Gold text for highlights */
+    --text-accent: 43 74% 45%;                /* Brighter deep gold text for highlights */
     
     /* Interactive States */
     --border-default: 0 0% 25%;               /* Dark borders */
-    --border-hover: 45 100% 50%;              /* Gold borders on hover */
-    --border-focus: 45 100% 55%;              /* Bright gold for focus */
+    --border-hover: 43 74% 45%;               /* Brighter deep gold borders on hover */
+    --border-focus: 43 74% 50%;               /* Even brighter deep gold for focus */
     
     /* Status Colors */
     --success: 142 76% 36%;                   /* Financial green */
@@ -40,7 +40,7 @@
     --info: 221 83% 53%;                      /* Financial blue */
     
     /* Chart/Data Colors */
-    --chart-primary: 45 100% 50%;             /* Gold */
+    --chart-primary: 43 74% 45%;              /* Brighter deep gold */
     --chart-secondary: 142 76% 36%;           /* Green */
     --chart-tertiary: 0 84% 60%;              /* Red */
     --chart-quaternary: 221 83% 53%;          /* Blue */
@@ -51,12 +51,12 @@
     --radius: 0.25rem;                        /* Minimal rounded corners */
     
     /* Shadows & Effects */
-    --shadow-terminal: 0 0 40px hsl(45 100% 50% / 0.1);
-    --glow-gold: 0 0 20px hsl(45 100% 50% / 0.3);
+    --shadow-terminal: 0 0 40px hsl(43 74% 45% / 0.1);
+    --glow-gold: 0 0 20px hsl(43 74% 45% / 0.3);
     --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     
     /* Gradients */
-    --gradient-gold: linear-gradient(135deg, hsl(45 100% 50%), hsl(45 100% 35%));
+    --gradient-gold: linear-gradient(135deg, hsl(43 74% 45%), hsl(43 74% 30%));
     --gradient-dark: linear-gradient(180deg, hsl(0 0% 12%), hsl(0 0% 8%));
     
     /* Legacy Variables for shadcn compatibility */
@@ -64,19 +64,19 @@
     --card-foreground: 0 0% 100%;
     --popover: 0 0% 12%;
     --popover-foreground: 0 0% 100%;
-    --primary: 45 100% 50%;
+    --primary: 43 74% 45%;
     --primary-foreground: 0 0% 0%;
     --secondary: 0 0% 16%;
     --secondary-foreground: 0 0% 100%;
     --muted: 0 0% 16%;
     --muted-foreground: 0 0% 60%;
-    --accent: 45 100% 50%;
+    --accent: 43 74% 45%;
     --accent-foreground: 0 0% 0%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 25%;
     --input: 0 0% 16%;
-    --ring: 45 100% 50%;
+    --ring: 43 74% 45%;
   }
   
   /* Force dark mode always - Bloomberg style */
