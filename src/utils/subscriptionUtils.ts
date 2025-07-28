@@ -46,6 +46,8 @@ export const isSubscribedToCompany = (
     sub.userID === userProfileId && 
     sub.status === 'ACTIVE' &&
     (
+      // Individual company subscription (encoded in gicsSubCategory)
+      (sub.gicsSubCategory === `COMPANY:${company.tickerSymbol}`) ||
       // Sector-level subscription (covers all companies in the sector)
       (sub.gicsSector === company.gicsSector && !sub.gicsSubCategory) ||
       // Subsector-level subscription (covers all companies in the subsector)
@@ -88,35 +90,70 @@ export const subscribeToSectorOrCompany = async (
   userProfileId: string,
   tickerSymbol?: string
 ): Promise<Subscription> => {
+  // For individual company subscriptions, encode the ticker symbol
+  const actualGicsSubCategory = tickerSymbol ? `COMPANY:${tickerSymbol}` : gicsSubCategory;
+
+  // Check if subscription already exists
+  let query = supabase
+    .from('subscriptions')
+    .select('*')
+    .eq('userID', userProfileId)
+    .eq('status', 'ACTIVE')
+    .eq('gicsSector', gicsSector);
+
+  if (actualGicsSubCategory) {
+    query = query.eq('gicsSubCategory', actualGicsSubCategory);
+  } else {
+    query = query.is('gicsSubCategory', null);
+  }
+
+  const { data: existingSubscriptions } = await query;
+
+  if (existingSubscriptions && existingSubscriptions.length > 0) {
+    // Subscription already exists
+    const existing = existingSubscriptions[0];
+    const successMessage = tickerSymbol 
+      ? `Already subscribed to ${tickerSymbol}` 
+      : `Already subscribed to ${gicsSector} sector`;
+    toast.success(successMessage);
+    
+    return {
+      subID: existing.subID,
+      userID: existing.userID,
+      status: existing.status,
+      gicsSector: existing.gicsSector,
+      gicsSubCategory: existing.gicsSubCategory
+    };
+  }
+
   const subscriptionData = {
     userID: userProfileId,
     status: 'ACTIVE' as const,
     subStart: new Date().toISOString(),
     gicsSector: gicsSector,
-    gicsSubCategory: gicsSubCategory
+    gicsSubCategory: actualGicsSubCategory
   };
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('subscriptions')
-    .insert(subscriptionData);
+    .insert(subscriptionData)
+    .select()
+    .single();
 
   if (error) throw error;
-
-  // Return the new subscription for local state update
-  const newSubscription: Subscription = {
-    subID: crypto.randomUUID(),
-    userID: userProfileId,
-    status: 'ACTIVE',
-    gicsSector: gicsSector,
-    gicsSubCategory: gicsSubCategory
-  };
 
   const successMessage = tickerSymbol 
     ? `Subscribed to ${tickerSymbol}` 
     : `Subscribed to ${gicsSector} sector`;
   toast.success(successMessage);
 
-  return newSubscription;
+  return {
+    subID: data.subID,
+    userID: data.userID,
+    status: data.status,
+    gicsSector: data.gicsSector,
+    gicsSubCategory: data.gicsSubCategory
+  };
 };
 
 export const unsubscribeFromSectorOrCompany = async (
@@ -125,6 +162,9 @@ export const unsubscribeFromSectorOrCompany = async (
   userProfileId: string,
   tickerSymbol?: string
 ): Promise<void> => {
+  // For individual company subscriptions, encode the ticker symbol
+  const actualGicsSubCategory = tickerSymbol ? `COMPANY:${tickerSymbol}` : gicsSubCategory;
+
   let query = supabase
     .from('subscriptions')
     .update({ status: 'INACTIVE' })
@@ -132,8 +172,8 @@ export const unsubscribeFromSectorOrCompany = async (
     .eq('status', 'ACTIVE')
     .eq('gicsSector', gicsSector);
 
-  if (gicsSubCategory) {
-    query = query.eq('gicsSubCategory', gicsSubCategory);
+  if (actualGicsSubCategory) {
+    query = query.eq('gicsSubCategory', actualGicsSubCategory);
   } else {
     query = query.is('gicsSubCategory', null);
   }

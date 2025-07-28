@@ -100,6 +100,10 @@ const Settings: React.FC = () => {
   const [profileSectionOpen, setProfileSectionOpen] = useState(false);
   const [companySectionOpen, setCompanySectionOpen] = useState(false);
   const [preferencesSectionOpen, setPreferencesSectionOpen] = useState(false);
+  const [notificationSectionOpen, setNotificationSectionOpen] = useState(false);
+  const [calendarSectionOpen, setCalendarSectionOpen] = useState(false);
+  const [eventViewSectionOpen, setEventViewSectionOpen] = useState(false);
+  const [appearanceSectionOpen, setAppearanceSectionOpen] = useState(false);
   const [securitySectionOpen, setSecuritySectionOpen] = useState(false);
   const [userManagementSectionOpen, setUserManagementSectionOpen] = useState(false);
   const [dangerZoneSectionOpen, setDangerZoneSectionOpen] = useState(false);
@@ -164,12 +168,12 @@ const Settings: React.FC = () => {
     }
   }, [user]);
 
-  // Fetch user subscriptions after profile is loaded
+  // Fetch user subscriptions after profile and GICS companies are loaded
   useEffect(() => {
-    if (profile) {
+    if (profile && gicsCompanies.length > 0) {
       fetchUserSubscriptions();
     }
-  }, [profile]);
+  }, [profile, gicsCompanies]);
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -236,6 +240,11 @@ const Settings: React.FC = () => {
         .order('companyName');
 
       if (error) throw error;
+      
+      console.log('=== Debug: fetchGicsCompanies ===');
+      console.log('GICS Companies fetched:', data?.length || 0);
+      console.log('Sample GICS companies:', data?.slice(0, 3));
+      
       setGicsCompanies(data || []);
     } catch (error) {
       console.error('Error fetching GICS companies:', error);
@@ -252,17 +261,63 @@ const Settings: React.FC = () => {
   const fetchUserSubscriptions = async () => {
     if (!profile) return;
     
+    console.log('=== Debug: fetchUserSubscriptions ===');
+    console.log('Profile user_id:', profile.user_id);
+    console.log('GICS Companies count:', gicsCompanies.length);
+    
     try {
       const { data, error } = await supabase
         .from('subscriptions')
-        .select('gicsSector, gicsSubCategory')
-        .eq('userID', profile.id);
+        .select('gicsSector, gicsSubCategory, userID')
+        .eq('userID', profile.user_id)
+        .eq('status', 'ACTIVE');
 
       if (error) throw error;
       
-      // For now, we'll use a different approach since subscriptions table structure is different
-      // We'll need to create a separate table for user-company subscriptions
-      setSelectedGics(new Set<string>());
+      console.log('Raw subscription data:', data);
+      console.log('Subscription count:', data?.length || 0);
+      
+      // Create a Set of ticker symbols for companies that the user is subscribed to
+      const subscribedTickers = new Set<string>();
+      
+      if (data) {
+        // For each subscription, find the corresponding companies and add their ticker symbols
+        for (const subscription of data) {
+          console.log('Processing subscription:', subscription);
+          
+          if (subscription.gicsSubCategory?.startsWith('COMPANY:')) {
+            // Individual company subscription
+            const tickerSymbol = subscription.gicsSubCategory.replace('COMPANY:', '');
+            console.log(`Individual company subscription: ${tickerSymbol}`);
+            subscribedTickers.add(tickerSymbol);
+          } else {
+            // Sector/subsector subscription
+            const matchingCompanies = gicsCompanies.filter(company => {
+              // Sector-level subscription (covers all companies in the sector)
+              if (subscription.gicsSector === company.gicsSector && !subscription.gicsSubCategory) {
+                console.log(`Sector match: ${company.tickerSymbol} matches sector ${subscription.gicsSector}`);
+                return true;
+              }
+              // Subsector-level subscription (covers all companies in the subsector)
+              if (subscription.gicsSector === company.gicsSector && 
+                  subscription.gicsSubCategory === company.gicsSubCategory) {
+                console.log(`Subsector match: ${company.tickerSymbol} matches ${subscription.gicsSector}:${subscription.gicsSubCategory}`);
+                return true;
+              }
+              return false;
+            });
+            
+            console.log(`Found ${matchingCompanies.length} matching companies for subscription:`, subscription);
+            
+            matchingCompanies.forEach(company => {
+              subscribedTickers.add(company.tickerSymbol);
+            });
+          }
+        }
+      }
+      
+      console.log('Final subscribed tickers:', Array.from(subscribedTickers));
+      setSelectedGics(subscribedTickers);
     } catch (error) {
       console.error('Error fetching subscriptions:', error);
     }
@@ -371,16 +426,91 @@ const Settings: React.FC = () => {
   };
 
   const handleUpdateSubscriptions = async () => {
-    if (!user) return;
+    if (!profile) return;
     
     setUpdateGicsLoading(true);
     try {
-      // For now, we'll just show a success message since the subscriptions table structure is different
-      // TODO: Implement proper subscription management with a new table structure
+      // Get current subscriptions to compare with new selections
+      const { data: currentSubscriptions, error: fetchError } = await supabase
+        .from('subscriptions')
+        .select('subID, gicsSector, gicsSubCategory')
+        .eq('userID', profile.user_id)
+        .eq('status', 'ACTIVE');
+
+      if (fetchError) throw fetchError;
+
+      // Create a map of current subscriptions for easy lookup
+      const currentSubscriptionsMap = new Map();
+      currentSubscriptions?.forEach(sub => {
+        if (sub.gicsSubCategory?.startsWith('COMPANY:')) {
+          // Individual company subscription
+          currentSubscriptionsMap.set(sub.gicsSubCategory, sub);
+        } else {
+          // Sector/subsector subscription
+          const key = `${sub.gicsSector}:${sub.gicsSubCategory || ''}`;
+          currentSubscriptionsMap.set(key, sub);
+        }
+      });
+
+      // Create individual company subscriptions by encoding the ticker symbol
+      const newSubscriptions = [];
+      for (const tickerSymbol of selectedGics) {
+        const company = gicsCompanies.find(c => c.tickerSymbol === tickerSymbol);
+        if (company) {
+          // Use a unique identifier format: "COMPANY:{tickerSymbol}" in gicsSubCategory
+          const uniqueKey = `COMPANY:${tickerSymbol}`;
+          if (!currentSubscriptionsMap.has(uniqueKey)) {
+            newSubscriptions.push({
+              userID: profile.user_id,
+              status: 'ACTIVE',
+              subStart: new Date().toISOString(),
+              gicsSector: company.gicsSector,
+              gicsSubCategory: uniqueKey // Store the ticker symbol here
+            });
+          }
+        }
+      }
+
+      // Insert new subscriptions
+      if (newSubscriptions.length > 0) {
+        const { error: insertError } = await supabase
+          .from('subscriptions')
+          .insert(newSubscriptions);
+
+        if (insertError) throw insertError;
+      }
+
+      // Deactivate subscriptions for companies that are no longer selected
+      const subscriptionsToDeactivate = [];
+      for (const [key, subscription] of currentSubscriptionsMap) {
+        if (key.startsWith('COMPANY:')) {
+          // Individual company subscription
+          const tickerSymbol = key.replace('COMPANY:', '');
+          if (!selectedGics.has(tickerSymbol)) {
+            subscriptionsToDeactivate.push(subscription.subID);
+          }
+        } else {
+          // Sector/subsector subscription - we don't manage these from GICS companies page
+          // These are managed by the sector subscription interface
+        }
+      }
+
+      if (subscriptionsToDeactivate.length > 0) {
+        const { error: updateError } = await supabase
+          .from('subscriptions')
+          .update({ status: 'INACTIVE' })
+          .in('subID', subscriptionsToDeactivate);
+
+        if (updateError) throw updateError;
+      }
+
       toast({
         title: "Success",
-        description: "Subscriptions updated successfully",
+        description: "GICS subscriptions updated successfully",
       });
+
+      // Refresh subscriptions
+      await fetchUserSubscriptions();
     } catch (error) {
       console.error('Error updating subscriptions:', error);
       toast({
@@ -695,6 +825,50 @@ const Settings: React.FC = () => {
                       className="text-xs"
                     />
                   </div>
+                  
+                  {/* Add New Company Section */}
+                  <div className="space-y-2 pt-2 border-t border-border-default">
+                    <Label className="text-xs font-medium text-gold">Add New Company</Label>
+                    <p className="text-xs text-text-muted">If your company is not listed above, you can add it here</p>
+                    <div className="flex gap-2">
+                      <Input 
+                        placeholder="Company name"
+                        value={newCompany}
+                        onChange={(e) => setNewCompany(e.target.value)}
+                        className="text-xs"
+                      />
+                      <Input 
+                        placeholder="Location (optional)"
+                        value={companyLocation}
+                        onChange={(e) => setCompanyLocation(e.target.value)}
+                        className="text-xs"
+                      />
+                      <Button 
+                        onClick={handleAddCompany} 
+                        disabled={!newCompany.trim() || addCompanyLoading}
+                        size="sm"
+                        className="text-xs"
+                      >
+                        {addCompanyLoading ? (
+                          <div className="flex items-center">
+                            <div className="animate-spin rounded-full h-3 w-3 border-b border-white mr-1"></div>
+                            Adding...
+                          </div>
+                        ) : (
+                          <>
+                            <Plus className="mr-1 h-3 w-3" />
+                            Add
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    {addCompanyError && (
+                      <p className="text-xs text-red-400">{addCompanyError}</p>
+                    )}
+                    {addCompanySuccess && (
+                      <p className="text-xs text-green-400">{addCompanySuccess}</p>
+                    )}
+                  </div>
                   <div className="flex justify-end">
                     <Button 
                       onClick={handleUpdateProfile} 
@@ -718,7 +892,7 @@ const Settings: React.FC = () => {
                 <CardTitle className="flex items-center justify-between text-text-primary text-sm">
                   <div className="flex items-center">
                     <Building className="mr-2 h-4 w-4 text-gold" />
-                    Company Management
+                    Company Directory
                   </div>
                   {companySectionOpen ? (
                     <ChevronDown className="h-4 w-4 text-gold" />
@@ -730,34 +904,8 @@ const Settings: React.FC = () => {
               {companySectionOpen && (
                 <CardContent className="space-y-3 text-xs">
                   <div className="space-y-2">
-                    <Label className="text-xs">Add New Company</Label>
-                    <div className="flex gap-2">
-                      <Input 
-                        placeholder="Company name"
-                        value={newCompany}
-                        onChange={(e) => setNewCompany(e.target.value)}
-                        className="text-xs"
-                      />
-                      <Input 
-                        placeholder="Location (optional)"
-                        value={companyLocation}
-                        onChange={(e) => setCompanyLocation(e.target.value)}
-                        className="text-xs"
-                      />
-                      <Button 
-                        onClick={handleAddCompany} 
-                        disabled={!newCompany.trim()}
-                        size="sm"
-                        className="text-xs"
-                      >
-                        <Plus className="mr-1 h-3 w-3" />
-                        Add
-                      </Button>
-                    </div>
-                  </div>
-                  <Separator />
-                  <div className="space-y-2">
                     <Label className="text-xs">Existing Companies</Label>
+                    <p className="text-xs text-text-muted">View all companies in the system</p>
                     <div className="space-y-1">
                       {companies.map((company) => (
                         <div key={company.companyID} className="flex items-center justify-between p-2 bg-surface-secondary rounded">
@@ -798,18 +946,30 @@ const Settings: React.FC = () => {
                   <div className="space-y-2">
                     <Label className="text-xs">Select GICS Companies</Label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
-                      {gicsCompanies.map((company) => (
-                        <div key={company.tickerSymbol} className="flex items-center space-x-2 p-2 bg-surface-secondary rounded">
-                          <Checkbox 
-                            id={company.tickerSymbol}
-                            checked={selectedGics.has(company.tickerSymbol)}
-                            onCheckedChange={() => handleGicsToggle(company.tickerSymbol)}
-                          />
-                          <Label htmlFor={company.tickerSymbol} className="text-xs cursor-pointer">
-                            {company.tickerSymbol} - {company.companyName}
-                          </Label>
-                        </div>
-                      ))}
+                      {gicsCompanies.map((company) => {
+                        const isSubscribed = selectedGics.has(company.tickerSymbol);
+                        return (
+                          <div key={company.tickerSymbol} className={`flex items-center space-x-2 p-2 rounded transition-colors ${
+                            isSubscribed ? 'bg-success/10 border border-success/20' : 'bg-surface-secondary'
+                          }`}>
+                            <Checkbox 
+                              id={company.tickerSymbol}
+                              checked={isSubscribed}
+                              onCheckedChange={() => handleGicsToggle(company.tickerSymbol)}
+                            />
+                            <Label htmlFor={company.tickerSymbol} className={`text-xs cursor-pointer flex-1 ${
+                              isSubscribed ? 'text-success' : 'text-text-primary'
+                            }`}>
+                              {company.tickerSymbol} - {company.companyName}
+                            </Label>
+                            {isSubscribed && (
+                              <div className="text-xs text-success font-medium">
+                                ✓ Subscribed
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="flex justify-end">
@@ -826,291 +986,309 @@ const Settings: React.FC = () => {
               )}
             </Card>
 
-            {/* Unified Preferences Section */}
+            {/* Notification Preferences */}
             <Card className="bg-surface-primary border-border-default">
               <CardHeader
                 className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
-                onClick={() => setPreferencesSectionOpen(!preferencesSectionOpen)}
+                onClick={() => setNotificationSectionOpen(!notificationSectionOpen)}
               >
                 <CardTitle className="flex items-center justify-between text-text-primary text-sm">
                   <div className="flex items-center">
-                    <Palette className="mr-2 h-4 w-4 text-gold" />
-                    Preferences
+                    <Bell className="mr-2 h-4 w-4 text-gold" />
+                    Notification Preferences
                   </div>
-                  {preferencesSectionOpen ? (
+                  {notificationSectionOpen ? (
                     <ChevronDown className="h-4 w-4 text-gold" />
                   ) : (
                     <ChevronRight className="h-4 w-4 text-gold" />
                   )}
                 </CardTitle>
               </CardHeader>
-              {preferencesSectionOpen && (
-                <CardContent className="space-y-4 text-xs">
-                  {/* Notification Preferences */}
-                  <div className="space-y-3">
-                    <div className="flex items-center">
-                      <Bell className="mr-2 h-4 w-4 text-gold" />
-                      <Label className="text-xs font-semibold">Notification Preferences</Label>
+              {notificationSectionOpen && (
+                <CardContent className="space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs">Email Notifications</Label>
+                      <p className="text-xs text-text-muted">Receive email notifications for events</p>
                     </div>
-                    <div className="space-y-2 pl-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-xs">Email Notifications</Label>
-                          <p className="text-xs text-text-muted">Receive email notifications for events</p>
-                        </div>
-                        <Switch
-                          checked={notificationPreferences.emailNotifications}
-                          onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, emailNotifications: checked }))}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-xs">Event Reminders</Label>
-                          <p className="text-xs text-text-muted">Get reminded about upcoming events</p>
-                        </div>
-                        <Switch
-                          checked={notificationPreferences.eventReminders}
-                          onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, eventReminders: checked }))}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-xs">RSVP Updates</Label>
-                          <p className="text-xs text-text-muted">Notifications for RSVP status changes</p>
-                        </div>
-                        <Switch
-                          checked={notificationPreferences.rsvpUpdates}
-                          onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, rsvpUpdates: checked }))}
-                        />
-                      </div>
-                    </div>
+                    <Switch
+                      checked={notificationPreferences.emailNotifications}
+                      onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, emailNotifications: checked }))}
+                    />
                   </div>
-
-                  <Separator />
-
-                  {/* Appearance Settings */}
-                  <div className="space-y-3">
-                    <div className="flex items-center">
-                      <Palette className="mr-2 h-4 w-4 text-gold" />
-                      <Label className="text-xs font-semibold">Appearance Settings</Label>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs">Event Reminders</Label>
+                      <p className="text-xs text-text-muted">Get reminded about upcoming events</p>
                     </div>
-                    <div className="space-y-2 pl-6">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Theme</Label>
-                        <Select
-                          value={appearanceSettings.theme}
-                          onValueChange={(value) => handleAppearanceChange('theme', value)}
-                        >
-                          <SelectTrigger className="text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="bloomberg">Bloomberg Terminal</SelectItem>
-                            <SelectItem value="classic">Classic</SelectItem>
-                            <SelectItem value="modern">Modern</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Color Scheme</Label>
-                        <Select
-                          value={appearanceSettings.colorScheme}
-                          onValueChange={(value) => handleAppearanceChange('colorScheme', value)}
-                        >
-                          <SelectTrigger className="text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="dark">Dark</SelectItem>
-                            <SelectItem value="light">Light</SelectItem>
-                            <SelectItem value="auto">Auto</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Font Size</Label>
-                        <Select
-                          value={appearanceSettings.fontSize}
-                          onValueChange={(value) => handleAppearanceChange('fontSize', value)}
-                        >
-                          <SelectTrigger className="text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="small">Small</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="large">Large</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Data Density</Label>
-                        <Select
-                          value={appearanceSettings.dataDensity}
-                          onValueChange={(value) => handleAppearanceChange('dataDensity', value)}
-                        >
-                          <SelectTrigger className="text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="compact">Compact</SelectItem>
-                            <SelectItem value="comfortable">Comfortable</SelectItem>
-                            <SelectItem value="spacious">Spacious</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Accent Color</Label>
-                        <Select
-                          value={appearanceSettings.accentColor}
-                          onValueChange={(value) => handleAppearanceChange('accentColor', value)}
-                        >
-                          <SelectTrigger className="text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="gold">Gold</SelectItem>
-                            <SelectItem value="blue">Blue</SelectItem>
-                            <SelectItem value="green">Green</SelectItem>
-                            <SelectItem value="purple">Purple</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                    <Switch
+                      checked={notificationPreferences.eventReminders}
+                      onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, eventReminders: checked }))}
+                    />
                   </div>
-
-                  <Separator />
-
-                  {/* Calendar Preferences */}
-                  <div className="space-y-3">
-                    <div className="flex items-center">
-                      <CalendarDays className="mr-2 h-4 w-4 text-gold" />
-                      <Label className="text-xs font-semibold">Calendar Preferences</Label>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs">RSVP Updates</Label>
+                      <p className="text-xs text-text-muted">Notifications for RSVP status changes</p>
                     </div>
-                    <div className="space-y-2 pl-6">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Default View</Label>
-                        <Select
-                          value={calendarPreferences.defaultView}
-                          onValueChange={(value) => handleCalendarPreferenceChange('defaultView', value)}
-                        >
-                          <SelectTrigger className="text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="week">Week View</SelectItem>
-                            <SelectItem value="month">Month View</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-xs">Show Event Categories</Label>
-                          <p className="text-xs text-text-muted">Display event type legend on calendar</p>
-                        </div>
-                        <Switch
-                          checked={calendarPreferences.showEventCategory}
-                          onCheckedChange={(checked) => handleCalendarPreferenceChange('showEventCategory', checked)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Default Event Filter</Label>
-                        <Select
-                          value={calendarPreferences.defaultEventFilter}
-                          onValueChange={(value) => handleCalendarPreferenceChange('defaultEventFilter', value)}
-                        >
-                          <SelectTrigger className="text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Events</SelectItem>
-                            <SelectItem value="rsvp">My Events Only</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Default Sort</Label>
-                        <Select
-                          value={calendarPreferences.defaultSort}
-                          onValueChange={(value) => handleCalendarPreferenceChange('defaultSort', value)}
-                        >
-                          <SelectTrigger className="text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="events">Most Events</SelectItem>
-                            <SelectItem value="alpha">Alphabetical</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                    <Switch
+                      checked={notificationPreferences.rsvpUpdates}
+                      onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, rsvpUpdates: checked }))}
+                    />
                   </div>
+                </CardContent>
+              )}
+            </Card>
 
-                  <Separator />
-
-                  {/* Event View Preferences */}
-                  <div className="space-y-3">
-                    <div className="flex items-center">
-                      <CalendarDays className="mr-2 h-4 w-4 text-gold" />
-                      <Label className="text-xs font-semibold">Event View Preferences</Label>
-                    </div>
-                    <div className="space-y-2 pl-6">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Display Mode</Label>
-                        <Select
-                          value={eventViewPreferences.displayMode}
-                          onValueChange={(value) => handleEventViewPreferenceChange('displayMode', value)}
-                        >
-                          <SelectTrigger className="text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="list">📋 Enhanced List View (Recommended)</SelectItem>
-                            <SelectItem value="compact">📊 Compact Table View</SelectItem>
-                            <SelectItem value="cards">🎴 Card View</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-xs">Compact Information</Label>
-                          <p className="text-xs text-text-muted">Use smaller text and tighter spacing</p>
-                        </div>
-                        <Switch
-                          checked={eventViewPreferences.compactMode}
-                          onCheckedChange={(checked) => handleEventViewPreferenceChange('compactMode', checked)}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-xs">Show Status Badges</Label>
-                          <p className="text-xs text-text-muted">Display timing and RSVP status badges</p>
-                        </div>
-                        <Switch
-                          checked={eventViewPreferences.showStatusBadges}
-                          onCheckedChange={(checked) => handleEventViewPreferenceChange('showStatusBadges', checked)}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-xs">Auto-refresh Events</Label>
-                          <p className="text-xs text-text-muted">Automatically refresh every 5 minutes</p>
-                        </div>
-                        <Switch
-                          checked={eventViewPreferences.autoRefresh}
-                          onCheckedChange={(checked) => handleEventViewPreferenceChange('autoRefresh', checked)}
-                        />
-                      </div>
-                    </div>
+            {/* Calendar Preferences */}
+            <Card className="bg-surface-primary border-border-default">
+              <CardHeader
+                className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
+                onClick={() => setCalendarSectionOpen(!calendarSectionOpen)}
+              >
+                <CardTitle className="flex items-center justify-between text-text-primary text-sm">
+                  <div className="flex items-center">
+                    <CalendarDays className="mr-2 h-4 w-4 text-gold" />
+                    Calendar Preferences
                   </div>
+                  {calendarSectionOpen ? (
+                    <ChevronDown className="h-4 w-4 text-gold" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-gold" />
+                  )}
+                </CardTitle>
+              </CardHeader>
+              {calendarSectionOpen && (
+                <CardContent className="space-y-3 text-xs">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Default View</Label>
+                    <Select
+                      value={calendarPreferences.defaultView}
+                      onValueChange={(value) => handleCalendarPreferenceChange('defaultView', value)}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="week">Week View</SelectItem>
+                        <SelectItem value="month">Month View</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs">Show Event Categories</Label>
+                      <p className="text-xs text-text-muted">Display event type legend on calendar</p>
+                    </div>
+                    <Switch
+                      checked={calendarPreferences.showEventCategory}
+                      onCheckedChange={(checked) => handleCalendarPreferenceChange('showEventCategory', checked)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Default Event Filter</Label>
+                    <Select
+                      value={calendarPreferences.defaultEventFilter}
+                      onValueChange={(value) => handleCalendarPreferenceChange('defaultEventFilter', value)}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Events</SelectItem>
+                        <SelectItem value="rsvp">My Events Only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Default Sort</Label>
+                    <Select
+                      value={calendarPreferences.defaultSort}
+                      onValueChange={(value) => handleCalendarPreferenceChange('defaultSort', value)}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="events">Most Events</SelectItem>
+                        <SelectItem value="alpha">Alphabetical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
 
-                  <Separator />
+            {/* Event View Preferences */}
+            <Card className="bg-surface-primary border-border-default">
+              <CardHeader
+                className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
+                onClick={() => setEventViewSectionOpen(!eventViewSectionOpen)}
+              >
+                <CardTitle className="flex items-center justify-between text-text-primary text-sm">
+                  <div className="flex items-center">
+                    <CalendarDays className="mr-2 h-4 w-4 text-gold" />
+                    Event View Preferences
+                  </div>
+                  {eventViewSectionOpen ? (
+                    <ChevronDown className="h-4 w-4 text-gold" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-gold" />
+                  )}
+                </CardTitle>
+              </CardHeader>
+              {eventViewSectionOpen && (
+                <CardContent className="space-y-3 text-xs">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Display Mode</Label>
+                    <Select
+                      value={eventViewPreferences.displayMode}
+                      onValueChange={(value) => handleEventViewPreferenceChange('displayMode', value)}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="list">📋 Enhanced List View (Recommended)</SelectItem>
+                        <SelectItem value="compact">📊 Compact Table View</SelectItem>
+                        <SelectItem value="cards">🎴 Card View</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs">Compact Information</Label>
+                      <p className="text-xs text-text-muted">Use smaller text and tighter spacing</p>
+                    </div>
+                    <Switch
+                      checked={eventViewPreferences.compactMode}
+                      onCheckedChange={(checked) => handleEventViewPreferenceChange('compactMode', checked)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs">Show Status Badges</Label>
+                      <p className="text-xs text-text-muted">Display timing and RSVP status badges</p>
+                    </div>
+                    <Switch
+                      checked={eventViewPreferences.showStatusBadges}
+                      onCheckedChange={(checked) => handleEventViewPreferenceChange('showStatusBadges', checked)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs">Auto-refresh Events</Label>
+                      <p className="text-xs text-text-muted">Automatically refresh every 5 minutes</p>
+                    </div>
+                    <Switch
+                      checked={eventViewPreferences.autoRefresh}
+                      onCheckedChange={(checked) => handleEventViewPreferenceChange('autoRefresh', checked)}
+                    />
+                  </div>
+                </CardContent>
+              )}
+            </Card>
 
-                  {/* Save Button */}
-                  <div className="flex justify-end">
-                    <Button onClick={saveAppearanceSettings} size="sm" className="text-xs">
-                      Save All Preferences
-                    </Button>
+            {/* Appearance Settings */}
+            <Card className="bg-surface-primary border-border-default">
+              <CardHeader
+                className="cursor-pointer hover:bg-surface-secondary/50 transition-colors"
+                onClick={() => setAppearanceSectionOpen(!appearanceSectionOpen)}
+              >
+                <CardTitle className="flex items-center justify-between text-text-primary text-sm">
+                  <div className="flex items-center">
+                    <Palette className="mr-2 h-4 w-4 text-gold" />
+                    Appearance Settings
+                  </div>
+                  {appearanceSectionOpen ? (
+                    <ChevronDown className="h-4 w-4 text-gold" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-gold" />
+                  )}
+                </CardTitle>
+              </CardHeader>
+              {appearanceSectionOpen && (
+                <CardContent className="space-y-3 text-xs">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Theme</Label>
+                    <Select
+                      value={appearanceSettings.theme}
+                      onValueChange={(value) => handleAppearanceChange('theme', value)}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bloomberg">Bloomberg Terminal</SelectItem>
+                        <SelectItem value="classic">Classic</SelectItem>
+                        <SelectItem value="modern">Modern</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Color Scheme</Label>
+                    <Select
+                      value={appearanceSettings.colorScheme}
+                      onValueChange={(value) => handleAppearanceChange('colorScheme', value)}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dark">Dark</SelectItem>
+                        <SelectItem value="light">Light</SelectItem>
+                        <SelectItem value="auto">Auto</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Font Size</Label>
+                    <Select
+                      value={appearanceSettings.fontSize}
+                      onValueChange={(value) => handleAppearanceChange('fontSize', value)}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="small">Small</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="large">Large</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Data Density</Label>
+                    <Select
+                      value={appearanceSettings.dataDensity}
+                      onValueChange={(value) => handleAppearanceChange('dataDensity', value)}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="compact">Compact</SelectItem>
+                        <SelectItem value="comfortable">Comfortable</SelectItem>
+                        <SelectItem value="spacious">Spacious</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Accent Color</Label>
+                    <Select
+                      value={appearanceSettings.accentColor}
+                      onValueChange={(value) => handleAppearanceChange('accentColor', value)}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="gold">Gold</SelectItem>
+                        <SelectItem value="blue">Blue</SelectItem>
+                        <SelectItem value="green">Green</SelectItem>
+                        <SelectItem value="purple">Purple</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </CardContent>
               )}
