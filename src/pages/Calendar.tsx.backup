@@ -48,9 +48,9 @@ const CalendarPage: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [showCalendarPopup, setShowCalendarPopup] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [userRSVPs, setUserRSVPs] = useState<any[]>([]);
+  const [analystInsightsOpen, setAnalystInsightsOpen] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventDetailsOpen, setEventDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -671,16 +671,7 @@ const CalendarPage: React.FC = () => {
             >
               <ChevronRight className="h-3 w-3" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => setShowCalendarPopup(true)}
-              className="h-6 px-2 text-xs text-gold hover:bg-surface-secondary ml-2"
-              title="Open Calendar Assistant"
-            >
-              <CalendarDays className="h-3 w-3 mr-1" />
-              Assistant
-            </Button>
+
           </div>
 
           {/* Search Bar */}
@@ -1075,8 +1066,8 @@ const CalendarPage: React.FC = () => {
 
               {/* Content */}
               <div className="flex flex-col h-full pb-16 overflow-y-auto">
-                {/* Event Info */}
-                <div className="p-4 border-b border-zinc-700 bg-zinc-900/30">
+                                 {/* Event Info */}
+                 <div className="p-4 border-b border-zinc-700 bg-zinc-900/30">
                   <div className="flex gap-2 items-center mb-4">
                     <Badge className={`${getEventTypeColor(selectedEvent.eventType)}`}>
                       {selectedEvent.eventType.replace('_', ' ')}
@@ -1141,8 +1132,8 @@ const CalendarPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Weather Forecast for Event Date */}
-                <div className="p-4 border-b border-zinc-700 bg-zinc-800/20">
+                                 {/* Weather Forecast for Event Date */}
+                 <div className="p-4 border-b border-zinc-700 bg-zinc-800/20">
                   <div className="text-sm font-medium text-zinc-300 mb-3">Weather Forecast</div>
                   <div className="text-xs text-zinc-400 mb-2">
                     {format(new Date(selectedEvent.startDate), 'EEEE, MMMM d')}
@@ -1176,8 +1167,8 @@ const CalendarPage: React.FC = () => {
                   })()}
                 </div>
 
-                {/* RSVP Section */}
-                <div className="p-4 border-b border-zinc-700 bg-zinc-900/30">
+                                 {/* RSVP Section */}
+                 <div className="p-4 border-b border-zinc-700 bg-zinc-900/30">
                   <div className="text-sm font-medium text-zinc-300 mb-3">RSVP</div>
                   {isEventPast(selectedEvent) ? (
                     <Button 
@@ -1223,238 +1214,446 @@ const CalendarPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Events for Same Date */}
-                <div className="p-4 border-b border-zinc-700 flex-1 bg-zinc-800/20">
-                  <div className="text-sm font-medium text-zinc-300 mb-3">
-                    Other Events on {format(new Date(selectedEvent.startDate), 'MMM d')}
-                  </div>
-                  {(() => {
-                    const sameDay = events.filter(event => 
-                      isSameDay(new Date(event.startDate), new Date(selectedEvent.startDate)) &&
-                      event.eventID !== selectedEvent.eventID
-                    );
-                    
-                    if (sameDay.length === 0) {
-                      return (
-                        <div className="text-xs text-zinc-500 italic">
-                          No other events on this date
-                        </div>
-                      );
-                    }
+                                                  {/* Events for Same Date */}
+                 <div className="p-4 border-b border-zinc-700 flex-1 bg-zinc-800/20">
+                   <div className="text-sm font-medium text-zinc-300 mb-3">
+                     Other Events on {format(new Date(selectedEvent.startDate), 'MMM d')}
+                   </div>
+                   {(() => {
+                     const sameDay = events.filter(event => 
+                       isSameDay(new Date(event.startDate), new Date(selectedEvent.startDate)) &&
+                       event.eventID !== selectedEvent.eventID
+                     );
+                     
+                     if (sameDay.length === 0) {
+                       return (
+                         <div className="text-xs text-zinc-500 italic">
+                           No other events on this date
+                         </div>
+                       );
+                     }
 
-                    return (
-                      <div className="space-y-2">
-                        {sameDay.map((event) => (
-                          <div 
-                            key={event.eventID}
-                            className="p-2 bg-zinc-800/50 rounded border border-zinc-700 hover:border-gold/30 cursor-pointer transition-colors"
-                            onClick={() => {
-                              setSelectedEvent(event);
-                            }}
-                          >
-                            <div className="text-xs font-medium text-white mb-1">
-                              {event.eventName}
-                            </div>
-                            <div className="text-xs text-zinc-400 mb-1">
-                              {event.hostCompany}
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-zinc-500">
-                              <Clock className="h-3 w-3" />
-                              {format(new Date(event.startDate), 'h:mm a')}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
+                     return (
+                       <div className={`space-y-2 ${sameDay.length > 2 ? 'max-h-32 overflow-y-auto' : ''}`}>
+                         {sameDay.map((event) => (
+                           <div 
+                             key={event.eventID}
+                             className="p-2 bg-zinc-800/50 rounded border border-zinc-700 hover:border-gold/30 cursor-pointer transition-colors"
+                             onClick={() => {
+                               setSelectedEvent(event);
+                             }}
+                           >
+                             <div className="text-xs font-medium text-white mb-1">
+                               {event.eventName}
+                             </div>
+                             <div className="text-xs text-zinc-400 mb-1">
+                               {event.hostCompany}
+                             </div>
+                             <div className="flex items-center gap-2 text-xs text-zinc-500">
+                               <Clock className="h-3 w-3" />
+                               {format(new Date(event.startDate), 'h:mm a')}
+                             </div>
+                           </div>
+                         ))}
+                       </div>
+                     );
+                   })()}
+                 </div>
 
-                {/* Analyst Insights Section */}
-                <div className="p-4 border-b border-zinc-700 bg-zinc-900/40">
-                  <div className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-gold" />
-                    Analyst Insights
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {/* Price Performance */}
-                    <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
-                      <div className="text-xs font-medium text-gold mb-2">Price Performance</div>
-                      <div className="space-y-1 text-xs">
-                        {(() => {
-                          // Mock price performance data - replace with real API
-                          const company = companies.find(c => 
-                            c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
-                            c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
-                          );
-                          const ticker = company?.tickerSymbol || 'UNKNOWN';
-                          
-                          // Generate mock performance based on ticker
-                          const mockPerformance = {
-                            'AAPL': { change: '+2.3%', trend: 'up', price: '$185.42' },
-                            'MSFT': { change: '-1.1%', trend: 'down', price: '$415.67' },
-                            'GOOGL': { change: '+0.8%', trend: 'up', price: '$142.89' },
-                            'TSLA': { change: '+5.2%', trend: 'up', price: '$245.31' },
-                            'AMZN': { change: '-0.5%', trend: 'down', price: '$178.95' },
-                            'META': { change: '+1.7%', trend: 'up', price: '$485.12' },
-                            'NVDA': { change: '+3.4%', trend: 'up', price: '$892.45' },
-                            'NFLX': { change: '-2.1%', trend: 'down', price: '$612.78' }
-                          };
-                          
-                          const performance = mockPerformance[ticker as keyof typeof mockPerformance] || 
-                            { change: '+0.5%', trend: 'up', price: '$100.00' };
-                          
-                          return (
-                            <>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Ticker:</span>
-                                <span className="text-white font-mono">{ticker}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Current Price:</span>
-                                <span className="text-white font-mono">{performance.price}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Today's Change:</span>
-                                <span className={`font-mono ${performance.trend === 'up' ? 'text-green-400' : 'text-red-400'}`}>
-                                  {performance.change}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">30-Day Trend:</span>
-                                <span className={`font-mono ${performance.trend === 'up' ? 'text-green-400' : 'text-red-400'}`}>
-                                  {performance.trend === 'up' ? '+12.5%' : '-8.2%'}
-                                </span>
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
+                 {/* Analyst Insights Section */}
+                 <div className="border-b border-zinc-700 bg-zinc-900/40">
+                   <div 
+                     className="p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                     onClick={() => setAnalystInsightsOpen(!analystInsightsOpen)}
+                   >
+                     <div className="text-sm font-medium text-zinc-300 flex items-center justify-between">
+                       <div className="flex items-center gap-2">
+                         <TrendingUp className="h-4 w-4 text-gold" />
+                         Analyst Insights
+                       </div>
+                       <Button
+                         variant="ghost"
+                         size="sm"
+                         className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
+                       >
+                         {analystInsightsOpen ? (
+                           <ChevronDown className="h-4 w-4" />
+                         ) : (
+                           <ChevronRight className="h-4 w-4" />
+                         )}
+                       </Button>
+                     </div>
+                   </div>
+                   
+                   {analystInsightsOpen && (
+                     <div className="px-4 pb-4">
+                       {/* Event Timing Analysis */}
+                   <div className="space-y-3">
+                     <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
+                       <div className="text-xs font-medium text-gold mb-2">Timing Analysis</div>
+                       <div className="space-y-1 text-xs">
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Event Duration:</span>
+                           <span className="text-white">
+                             {selectedEvent.endDate 
+                               ? `${Math.round((new Date(selectedEvent.endDate).getTime() - new Date(selectedEvent.startDate).getTime()) / (1000 * 60 * 60))}h`
+                               : 'TBD'
+                             }
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Time of Day:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const hour = new Date(selectedEvent.startDate).getHours();
+                               if (hour < 12) return 'Morning';
+                               if (hour < 17) return 'Afternoon';
+                               return 'Evening';
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Day of Week:</span>
+                           <span className="text-white">
+                             {format(new Date(selectedEvent.startDate), 'EEEE')}
+                           </span>
+                         </div>
+                       </div>
+                     </div>
 
-                    {/* Analyst Coverage */}
-                    <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
-                      <div className="text-xs font-medium text-gold mb-2">Analyst Coverage</div>
-                      <div className="space-y-1 text-xs">
-                        {(() => {
-                          // Mock analyst coverage data
-                          const company = companies.find(c => 
-                            c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
-                            c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
-                          );
-                          const ticker = company?.tickerSymbol || 'UNKNOWN';
-                          
-                          // Mock coverage data
-                          const mockCoverage = {
-                            'AAPL': { analysts: 45, buy: 32, hold: 10, sell: 3, avgTarget: '$210.50' },
-                            'MSFT': { analysts: 38, buy: 28, hold: 8, sell: 2, avgTarget: '$450.00' },
-                            'GOOGL': { analysts: 42, buy: 35, hold: 6, sell: 1, avgTarget: '$165.75' },
-                            'TSLA': { analysts: 28, buy: 12, hold: 8, sell: 8, avgTarget: '$275.30' },
-                            'AMZN': { analysts: 40, buy: 30, hold: 8, sell: 2, avgTarget: '$195.00' },
-                            'META': { analysts: 35, buy: 25, hold: 8, sell: 2, avgTarget: '$520.00' },
-                            'NVDA': { analysts: 32, buy: 28, hold: 3, sell: 1, avgTarget: '$950.00' },
-                            'NFLX': { analysts: 30, buy: 18, hold: 10, sell: 2, avgTarget: '$650.00' }
-                          };
-                          
-                          const coverage = mockCoverage[ticker as keyof typeof mockCoverage] || 
-                            { analysts: 15, buy: 10, hold: 3, sell: 2, avgTarget: '$120.00' };
-                          
-                          return (
-                            <>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Total Analysts:</span>
-                                <span className="text-white">{coverage.analysts}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Buy Rating:</span>
-                                <span className="text-green-400">{coverage.buy}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Hold Rating:</span>
-                                <span className="text-yellow-400">{coverage.hold}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Sell Rating:</span>
-                                <span className="text-red-400">{coverage.sell}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Avg Target:</span>
-                                <span className="text-white font-mono">{coverage.avgTarget}</span>
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
+                     {/* Company Sector Analysis */}
+                     <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
+                       <div className="text-xs font-medium text-gold mb-2">Sector Context</div>
+                       <div className="space-y-1 text-xs">
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Sector:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const company = companies.find(c => 
+                                 c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
+                                 c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
+                               );
+                               return company?.gicsSector || 'Unknown';
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Sub-sector:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const company = companies.find(c => 
+                                 c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
+                                 c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
+                               );
+                               return company?.gicsSubCategory || 'Unknown';
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Sector Events Today:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const company = companies.find(c => 
+                                 c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
+                                 c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
+                               );
+                               if (!company) return '0';
+                               return events.filter(e => {
+                                 const eventCompany = companies.find(ec => 
+                                   ec.companyName?.toLowerCase() === e.hostCompany?.toLowerCase() ||
+                                   ec.tickerSymbol?.toLowerCase() === e.hostCompany?.toLowerCase()
+                                 );
+                                 return eventCompany?.gicsSector === company.gicsSector &&
+                                        isSameDay(new Date(e.startDate), new Date(selectedEvent.startDate));
+                               }).length;
+                             })()}
+                           </span>
+                         </div>
+                       </div>
+                     </div>
 
-                    {/* Event Type Trends */}
-                    <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
-                      <div className="text-xs font-medium text-gold mb-2">Event Type Trends</div>
-                      <div className="space-y-1 text-xs">
-                        {(() => {
-                          const eventType = selectedEvent.eventType;
-                          const currentMonth = new Date(selectedEvent.startDate).getMonth();
-                          const currentYear = new Date(selectedEvent.startDate).getFullYear();
-                          
-                          // Count similar events this month
-                          const similarEventsThisMonth = events.filter(e => 
-                            e.eventType === eventType &&
-                            new Date(e.startDate).getMonth() === currentMonth &&
-                            new Date(e.startDate).getFullYear() === currentYear
-                          ).length;
-                          
-                          // Count total events this month
-                          const totalEventsThisMonth = events.filter(e => 
-                            new Date(e.startDate).getMonth() === currentMonth &&
-                            new Date(e.startDate).getFullYear() === currentYear
-                          ).length;
-                          
-                          // Get event type breakdown
-                          const eventTypeBreakdown = events.filter(e => 
-                            new Date(e.startDate).getMonth() === currentMonth &&
-                            new Date(e.startDate).getFullYear() === currentYear
-                          ).reduce((acc, e) => {
-                            acc[e.eventType] = (acc[e.eventType] || 0) + 1;
-                            return acc;
-                          }, {} as Record<string, number>);
-                          
-                          return (
-                            <>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Similar Events:</span>
-                                <span className="text-white">{similarEventsThisMonth}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Total Events:</span>
-                                <span className="text-white">{totalEventsThisMonth}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Market Share:</span>
-                                <span className="text-white">
-                                  {totalEventsThisMonth > 0 ? Math.round((similarEventsThisMonth / totalEventsThisMonth) * 100) : 0}%
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-400">Top Event Type:</span>
-                                <span className="text-white">
-                                  {(() => {
-                                    const entries = Object.entries(eventTypeBreakdown);
-                                    if (entries.length === 0) return 'N/A';
-                                    const top = entries.reduce((a, b) => a[1] > b[1] ? a : b);
-                                    return `${top[0].replace('_', ' ')} (${top[1]})`;
-                                  })()}
-                                </span>
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                     {/* Market Context */}
+                     <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
+                       <div className="text-xs font-medium text-gold mb-2">Market Context</div>
+                       <div className="space-y-1 text-xs">
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Week of Month:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const day = new Date(selectedEvent.startDate).getDate();
+                               if (day <= 7) return 'Week 1';
+                               if (day <= 14) return 'Week 2';
+                               if (day <= 21) return 'Week 3';
+                               return 'Week 4';
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Month Context:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const month = new Date(selectedEvent.startDate).getMonth();
+                               const monthNames = ['Q1', 'Q1', 'Q1', 'Q2', 'Q2', 'Q2', 'Q3', 'Q3', 'Q3', 'Q4', 'Q4', 'Q4'];
+                               return monthNames[month];
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Earnings Season:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const month = new Date(selectedEvent.startDate).getMonth();
+                               if ([0, 3, 6, 9].includes(month)) return 'Peak Season';
+                               return 'Regular Period';
+                             })()}
+                           </span>
+                         </div>
+                       </div>
+                     </div>
 
-                {/* Mini Calendar */}
-                <div className="p-4 bg-zinc-900/50">
+                     {/* Event Type Trends */}
+                     <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
+                       <div className="text-xs font-medium text-gold mb-2">Event Trends</div>
+                       <div className="space-y-1 text-xs">
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">This Event Type:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const thisMonth = events.filter(e => 
+                                 e.eventType === selectedEvent.eventType &&
+                                 isSameMonth(new Date(e.startDate), new Date(selectedEvent.startDate))
+                               ).length;
+                               return `${thisMonth} this month`;
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Company Events:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const companyEvents = events.filter(e => 
+                                 e.hostCompany === selectedEvent.hostCompany &&
+                                 isSameMonth(new Date(e.startDate), new Date(selectedEvent.startDate))
+                               ).length;
+                               return `${companyEvents} this month`;
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Sector Events:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const company = companies.find(c => 
+                                 c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
+                                 c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
+                               );
+                               if (!company) return '0';
+                               return events.filter(e => {
+                                 const eventCompany = companies.find(ec => 
+                                   ec.companyName?.toLowerCase() === e.hostCompany?.toLowerCase() ||
+                                   ec.tickerSymbol?.toLowerCase() === e.hostCompany?.toLowerCase()
+                                 );
+                                 return eventCompany?.gicsSector === company.gicsSector &&
+                                        isSameMonth(new Date(e.startDate), new Date(selectedEvent.startDate));
+                               }).length + ' this month';
+                             })()}
+                           </span>
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Upcoming Catalysts */}
+                     <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
+                       <div className="text-xs font-medium text-gold mb-2">Upcoming Catalysts</div>
+                       <div className="space-y-1 text-xs">
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Next 3 Days:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const next3Days = events.filter(e => {
+                                 const eventDate = new Date(e.startDate);
+                                 const today = new Date();
+                                 const diffTime = eventDate.getTime() - today.getTime();
+                                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                 return diffDays > 0 && diffDays <= 3;
+                               }).length;
+                               return `${next3Days} events`;
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Same Company:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const companyEvents = events.filter(e => {
+                                 const eventDate = new Date(e.startDate);
+                                 const today = new Date();
+                                 const diffTime = eventDate.getTime() - today.getTime();
+                                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                 return e.hostCompany === selectedEvent.hostCompany && 
+                                        diffDays > 0 && diffDays <= 7;
+                               }).length;
+                               return `${companyEvents} in next 7 days`;
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Sector Events:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const company = companies.find(c => 
+                                 c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
+                                 c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
+                               );
+                               if (!company) return '0';
+                               const sectorEvents = events.filter(e => {
+                                 const eventCompany = companies.find(ec => 
+                                   ec.companyName?.toLowerCase() === e.hostCompany?.toLowerCase() ||
+                                   ec.tickerSymbol?.toLowerCase() === e.hostCompany?.toLowerCase()
+                                 );
+                                 const eventDate = new Date(e.startDate);
+                                 const today = new Date();
+                                 const diffTime = eventDate.getTime() - today.getTime();
+                                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                 return eventCompany?.gicsSector === company.gicsSector &&
+                                        diffDays > 0 && diffDays <= 7;
+                               }).length;
+                               return `${sectorEvents} in next 7 days`;
+                             })()}
+                           </span>
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Geographic & Peer Context */}
+                     <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
+                       <div className="text-xs font-medium text-gold mb-2">Geographic & Peers</div>
+                       <div className="space-y-1 text-xs">
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Location Type:</span>
+                           <span className="text-white">
+                             {(() => {
+                               if (!selectedEvent.location) return 'Virtual/TBD';
+                               const location = selectedEvent.location.toLowerCase();
+                               if (location.includes('virtual') || location.includes('zoom') || location.includes('webinar')) {
+                                 return 'Virtual Event';
+                               } else if (location.includes('nyc') || location.includes('new york')) {
+                                 return 'NYC Hub';
+                               } else if (location.includes('sf') || location.includes('san francisco')) {
+                                 return 'SF Hub';
+                               } else if (location.includes('london') || location.includes('uk')) {
+                                 return 'London Hub';
+                               } else {
+                                 return 'Physical Event';
+                               }
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Peer Companies:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const company = companies.find(c => 
+                                 c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
+                                 c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
+                               );
+                               if (!company) return '0';
+                               const peers = companies.filter(c => 
+                                 c.gicsSector === company.gicsSector && 
+                                 c.companyID !== company.companyID
+                               ).length;
+                               return `${peers} in sector`;
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Peer Events Today:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const company = companies.find(c => 
+                                 c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
+                                 c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
+                               );
+                               if (!company) return '0';
+                               const peerEvents = events.filter(e => {
+                                 const eventCompany = companies.find(ec => 
+                                   ec.companyName?.toLowerCase() === e.hostCompany?.toLowerCase() ||
+                                   ec.tickerSymbol?.toLowerCase() === e.hostCompany?.toLowerCase()
+                                 );
+                                 return eventCompany?.gicsSector === company.gicsSector &&
+                                        eventCompany?.companyID !== company.companyID &&
+                                        isSameDay(new Date(e.startDate), new Date(selectedEvent.startDate));
+                               }).length;
+                               return `${peerEvents} events`;
+                             })()}
+                           </span>
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Historical Context */}
+                     <div className="p-3 bg-zinc-800/50 rounded border border-zinc-700">
+                       <div className="text-xs font-medium text-gold mb-2">Historical Context</div>
+                       <div className="space-y-1 text-xs">
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Last Month Events:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const lastMonth = events.filter(e => 
+                                 e.hostCompany === selectedEvent.hostCompany &&
+                                 isSameMonth(new Date(e.startDate), subMonths(new Date(selectedEvent.startDate), 1))
+                               ).length;
+                               return `${lastMonth} events`;
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Sector Activity:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const company = companies.find(c => 
+                                 c.companyName?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase() ||
+                                 c.tickerSymbol?.toLowerCase() === selectedEvent.hostCompany?.toLowerCase()
+                               );
+                               if (!company) return 'Low';
+                               const sectorEvents = events.filter(e => {
+                                 const eventCompany = companies.find(ec => 
+                                   ec.companyName?.toLowerCase() === e.hostCompany?.toLowerCase() ||
+                                   ec.tickerSymbol?.toLowerCase() === e.hostCompany?.toLowerCase()
+                                 );
+                                 return eventCompany?.gicsSector === company.gicsSector &&
+                                        isSameMonth(new Date(e.startDate), new Date(selectedEvent.startDate));
+                               }).length;
+                               if (sectorEvents > 20) return 'Very High';
+                               if (sectorEvents > 10) return 'High';
+                               if (sectorEvents > 5) return 'Medium';
+                               return 'Low';
+                             })()}
+                           </span>
+                         </div>
+                         <div className="flex justify-between">
+                           <span className="text-zinc-400">Event Type Frequency:</span>
+                           <span className="text-white">
+                             {(() => {
+                               const eventTypeCount = events.filter(e => 
+                                 e.eventType === selectedEvent.eventType &&
+                                 isSameMonth(new Date(e.startDate), new Date(selectedEvent.startDate))
+                               ).length;
+                               if (eventTypeCount > 15) return 'Very Common';
+                               if (eventTypeCount > 8) return 'Common';
+                               if (eventTypeCount > 3) return 'Occasional';
+                               return 'Rare';
+                             })()}
+                           </span>
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                     )}
+                 </div>
+
+                 {/* Mini Calendar */}
+                 <div className="p-4 bg-zinc-900/50">
                   <div className="text-sm font-medium text-zinc-300 mb-3">Calendar</div>
                   {(() => {
                     const eventDate = new Date(selectedEvent.startDate);
@@ -1510,59 +1709,59 @@ const CalendarPage: React.FC = () => {
                           ))}
                         </div>
 
-                        {/* Calendar Grid */}
-                        <div className="grid grid-cols-7 gap-1">
-                          {calendarDays.map((day, i) => {
-                            const dayEvents = events.filter(event => 
-                              isSameDay(new Date(event.startDate), day)
-                            );
-                            const eventCount = dayEvents.length;
-                            const isEventDay = isSameDay(day, eventDate);
-                            const isCurrentMonth = isSameMonth(day, eventDate);
-                            const isCurrentDay = isToday(day);
+                                                 {/* Calendar Grid */}
+                         <div className="grid grid-cols-7 gap-1">
+                           {calendarDays.map((day, i) => {
+                             const dayEvents = events.filter(event => 
+                               isSameDay(new Date(event.startDate), day)
+                             );
+                             const eventCount = dayEvents.length;
+                             const isEventDay = isSameDay(day, eventDate);
+                             const isCurrentMonth = isSameMonth(day, eventDate);
+                             const isCurrentDay = isToday(day);
 
-                            return (
-                              <Button
-                                key={i}
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  // Navigate to the date on main calendar
-                                  setCurrentMonth(day);
-                                  setSelectedDate(day);
-                                  // Switch to event if available
-                                  if (dayEvents.length > 0) {
-                                    setSelectedEvent(dayEvents[0]);
-                                  }
-                                }}
-                                className={`h-8 w-8 p-0 text-xs relative ${
-                                  isEventDay 
-                                    ? 'bg-gold text-black hover:bg-gold/90' 
-                                    : isCurrentDay
-                                    ? 'bg-gold/20 text-gold hover:bg-gold/30'
-                                    : isCurrentMonth
-                                    ? 'text-zinc-300 hover:bg-zinc-700'
-                                    : 'text-zinc-600 hover:bg-zinc-800'
-                                }`}
-                              >
-                                {format(day, 'd')}
-                                {eventCount > 0 && (
-                                  <div className={`absolute -top-1 -right-1 text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold text-[10px] border border-zinc-700 ${
-                                    eventCount >= 5 
-                                      ? 'bg-red-500 text-white' 
-                                      : eventCount >= 3 
-                                      ? 'bg-orange-500 text-white' 
-                                      : eventCount >= 2 
-                                      ? 'bg-yellow-500 text-black' 
-                                      : 'bg-gold text-black'
-                                  }`}>
-                                    {eventCount > 9 ? '9+' : eventCount}
-                                  </div>
-                                )}
-                              </Button>
-                            );
-                          })}
-                        </div>
+                             return (
+                               <Button
+                                 key={i}
+                                 variant="ghost"
+                                 size="sm"
+                                 onClick={() => {
+                                   // Navigate to the date on main calendar
+                                   setCurrentMonth(day);
+                                   setSelectedDate(day);
+                                   // Switch to event if available
+                                   if (dayEvents.length > 0) {
+                                     setSelectedEvent(dayEvents[0]);
+                                   }
+                                 }}
+                                 className={`h-8 w-8 p-0 text-xs relative ${
+                                   isEventDay 
+                                     ? 'bg-gold text-black hover:bg-gold/90' 
+                                     : isCurrentDay
+                                     ? 'bg-gold/20 text-gold hover:bg-gold/30'
+                                     : isCurrentMonth
+                                     ? 'text-zinc-300 hover:bg-zinc-700'
+                                     : 'text-zinc-600 hover:bg-zinc-800'
+                                 }`}
+                               >
+                                 {format(day, 'd')}
+                                 {eventCount > 0 && (
+                                   <div className={`absolute -top-1 -right-1 text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold text-[10px] border border-zinc-700 ${
+                                     eventCount >= 5 
+                                       ? 'bg-red-500 text-white' 
+                                       : eventCount >= 3 
+                                       ? 'bg-orange-500 text-white' 
+                                       : eventCount >= 2 
+                                       ? 'bg-yellow-500 text-black' 
+                                       : 'bg-gold text-black'
+                                   }`}>
+                                     {eventCount > 9 ? '9+' : eventCount}
+                                   </div>
+                                 )}
+                               </Button>
+                             );
+                           })}
+                         </div>
                       </div>
                     );
                   })()}
@@ -1585,6 +1784,8 @@ const CalendarPage: React.FC = () => {
             <kbd className="mx-1 px-1 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-xs">Esc</kbd> Clear search
           </div>
         </div>
+
+
       </div>
     </Layout>
   );

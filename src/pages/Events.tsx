@@ -74,14 +74,33 @@ const Events: React.FC = () => {
       
       // Fetch RSVP status for each event if user is logged in
       if (profile && data) {
+        console.log('Fetching RSVPs for profile:', { profileId: profile.id, userId: profile.user_id });
+        
         const eventsWithRSVP = await Promise.all(
           data.map(async (event) => {
-            const { data: rsvp } = await supabase
+            // Try profile.id first, then profile.user_id if no results
+            let { data: rsvp, error: rsvpError } = await supabase
               .from('rsvps')
-              .select('status')
+              .select('status, userID')
               .eq('eventID', event.eventID)
               .eq('userID', profile.id)
               .maybeSingle();
+            
+            // If no RSVP found with profile.id, try with profile.user_id
+            if (!rsvp && profile.user_id && profile.user_id !== profile.id) {
+              const { data: rsvp2, error: rsvpError2 } = await supabase
+                .from('rsvps')
+                .select('status, userID')
+                .eq('eventID', event.eventID)
+                .eq('userID', profile.user_id)
+                .maybeSingle();
+              
+              rsvp = rsvp2;
+              rsvpError = rsvpError2;
+              console.log(`Tried profile.user_id for event ${event.eventID}:`, { rsvp: rsvp2, rsvpError: rsvpError2 });
+            }
+            
+            console.log(`RSVP for event ${event.eventID}:`, { rsvp, rsvpError, eventName: event.eventName });
             
             return {
               ...event,
@@ -121,9 +140,12 @@ const Events: React.FC = () => {
         filtered = filtered.filter(event => new Date(event.startDate) >= now);
         break;
       case 'my-events':
+        console.log('Filtering My Events from:', events.length, 'events');
+        console.log('Events with RSVP status:', events.map(e => ({ name: e.eventName, rsvpStatus: e.rsvpStatus })));
         filtered = filtered.filter(event => 
           event.rsvpStatus && ['ACCEPTED', 'TENTATIVE'].includes(event.rsvpStatus)
         );
+        console.log('My Events after filtering:', filtered.length, 'events');
         break;
       case 'needs-response':
         filtered = filtered.filter(event => 
@@ -176,7 +198,7 @@ const Events: React.FC = () => {
       const rsvpPromises = selectedEventIDs.map(eventID =>
         supabase.from('rsvps').upsert({
           eventID,
-          userID: profile.id,
+          userID: profile.id, // Use profile.id as it matches the database foreign key
           status,
           rsvpDate: new Date().toISOString()
         })
