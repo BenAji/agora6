@@ -60,7 +60,7 @@ const Events: React.FC = () => {
 
   useEffect(() => {
     fetchEvents();
-  }, []);
+  }, [profile]);
 
   const fetchEvents = async () => {
     try {
