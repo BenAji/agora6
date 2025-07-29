@@ -17,14 +17,14 @@ interface LayoutProps {
   currentPage?: string;
 }
 
-const Layout = ({ children, currentPage = 'dashboard' }: LayoutProps) => {
+const Layout = ({ children, currentPage = 'calendar' }: LayoutProps) => {
   const { signOut, profile, user } = useAuth();
   
   const navItems = [
+    { id: 'calendar', label: 'Calendar', icon: Calendar, path: '/calendar' },
+    { id: 'events', label: 'Events', icon: CalendarDays, path: '/events' },
     // Only show Dashboard for IR Admins
     ...(profile?.role === 'IR_ADMIN' ? [{ id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/dashboard' }] : []),
-    { id: 'events', label: 'Events', icon: CalendarDays, path: '/events' },
-    { id: 'calendar', label: 'Calendar', icon: Calendar, path: '/calendar' },
     { id: 'companies', label: 'Companies', icon: Building2, path: '/companies' },
   ];
 

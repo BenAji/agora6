@@ -60,7 +60,7 @@ const Index: React.FC = () => {
             <Button 
               variant="outline" 
               className="border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/calendar')}
             >
               View Demo
             </Button>

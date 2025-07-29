@@ -10,34 +10,71 @@ const RSVP_LABELS = ['ACCEPTED', 'DECLINED', 'TENTATIVE', 'PENDING'];
 
 const Dashboard: React.FC = () => {
   const [eventCount, setEventCount] = useState(0);
+  const [myEventCount, setMyEventCount] = useState(0);
   const [rsvpCount, setRsvpCount] = useState(0);
   const [rsvpStatusData, setRsvpStatusData] = useState<any[]>([]);
   const [eventsPerCompany, setEventsPerCompany] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      // Fetch events
+      
+      // Fetch all events
       const { data: events, error: eventsError } = await supabase.from('events').select('eventID, hostCompany');
-      // Fetch RSVPs
-      const { data: rsvps, error: rsvpsError } = await supabase.from('rsvps').select('status');
+      
+      // Fetch user-specific RSVPs if user is logged in
+      let userRsvps: any[] = [];
+      if (profile) {
+        console.log('Fetching user RSVPs for profile:', { profileId: profile.id, userId: profile.user_id });
+        
+        // Try profile.id first, then profile.user_id if no results
+        let { data: rsvps, error: rsvpsError } = await supabase
+          .from('rsvps')
+          .select('eventID, status, userID')
+          .eq('userID', profile.id);
+        
+        // If no RSVPs found with profile.id, try with profile.user_id
+        if ((!rsvps || rsvps.length === 0) && profile.user_id && profile.user_id !== profile.id) {
+          const { data: rsvps2, error: rsvpsError2 } = await supabase
+            .from('rsvps')
+            .select('eventID, status, userID')
+            .eq('userID', profile.user_id);
+          
+          rsvps = rsvps2;
+          rsvpsError = rsvpsError2;
+          console.log('Tried profile.user_id for RSVPs:', { rsvps: rsvps2, rsvpsError: rsvpsError2 });
+        }
+        
+        userRsvps = rsvps || [];
+        console.log('User RSVPs found:', userRsvps.length);
+      }
+      
+      // Fetch all RSVPs for total count
+      const { data: allRsvps, error: allRsvpsError } = await supabase.from('rsvps').select('status');
+      
       // Fetch companies
       const { data: companies, error: companiesError } = await supabase.from('gics_companies').select('companyName');
 
-      if (eventsError || rsvpsError || companiesError) {
+      if (eventsError || allRsvpsError || companiesError) {
         setLoading(false);
         return;
       }
 
       setEventCount(events.length);
-      setRsvpCount(rsvps.length);
+      setRsvpCount(allRsvps.length);
 
-      // RSVP status breakdown
+      // Calculate my events count (events where user has ACCEPTED or TENTATIVE RSVP)
+      const myEvents = userRsvps.filter(rsvp => 
+        ['ACCEPTED', 'TENTATIVE'].includes(rsvp.status)
+      ).length;
+      setMyEventCount(myEvents);
+
+      // RSVP status breakdown for user's RSVPs
       const rsvpStatusCounts = RSVP_LABELS.map(label => ({
         name: label.charAt(0) + label.slice(1).toLowerCase(),
-        value: rsvps.filter(r => r.status === label).length
+        value: userRsvps.filter(r => r.status === label).length
       }));
       setRsvpStatusData(rsvpStatusCounts);
 
@@ -54,7 +91,7 @@ const Dashboard: React.FC = () => {
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [profile]);
 
   return (
     <Layout currentPage="dashboard">
@@ -77,18 +114,18 @@ const Dashboard: React.FC = () => {
                 </Card>
                 <Card className="bg-surface-primary border-border-default">
                   <CardHeader>
-                    <CardTitle className="text-gold">Total RSVPs</CardTitle>
+                    <CardTitle className="text-gold">My Events</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-bold text-text-primary">{rsvpCount}</div>
+                    <div className="text-3xl font-bold text-text-primary">{myEventCount}</div>
                   </CardContent>
                 </Card>
                 <Card className="bg-surface-primary border-border-default">
                   <CardHeader>
-                    <CardTitle className="text-gold">Companies</CardTitle>
+                    <CardTitle className="text-gold">Total RSVPs</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-bold text-text-primary">{eventsPerCompany.length}</div>
+                    <div className="text-3xl font-bold text-text-primary">{rsvpCount}</div>
                   </CardContent>
                 </Card>
               </div>
@@ -97,7 +134,7 @@ const Dashboard: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <Card className="bg-surface-primary border-border-default">
                   <CardHeader>
-                    <CardTitle className="text-gold">RSVP Status Breakdown</CardTitle>
+                    <CardTitle className="text-gold">My RSVP Status Breakdown</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={250}>

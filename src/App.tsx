@@ -49,13 +49,8 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   if (user) {
-    // Redirect based on user role
-    if (profile?.role === 'IR_ADMIN') {
-      return <Navigate to="/dashboard" replace />;
-    } else {
-      // Non-admin users go to events page
-      return <Navigate to="/events" replace />;
-    }
+    // Redirect all users to calendar page
+    return <Navigate to="/calendar" replace />;
   }
 
   return <>{children}</>;

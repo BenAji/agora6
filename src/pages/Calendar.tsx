@@ -546,6 +546,33 @@ const CalendarPage: React.FC = () => {
     filteredCompanies = filteredCompanies.filter(c => c.companyID === selectedCompany);
   }
 
+  const filteredAndSearchedEvents = useMemo(() => {
+    let currentEvents = [...events];
+
+    if (showOnlyRSVP) {
+      currentEvents = currentEvents.filter(event => getRSVPStatus(event.eventID) === 'ACCEPTED');
+    }
+
+    if (selectedGicsSector) {
+      currentEvents = currentEvents.filter(event => event.companyID && companies.find(c => c.companyID === event.companyID)?.gicsSector === selectedGicsSector);
+    }
+    if (selectedGicsSubSector) {
+      currentEvents = currentEvents.filter(event => event.companyID && companies.find(c => c.companyID === event.companyID)?.gicsSubCategory === selectedGicsSubSector);
+    }
+    if (selectedCompany) {
+      currentEvents = currentEvents.filter(event => event.companyID === selectedCompany);
+    }
+    if (searchQuery) {
+      currentEvents = currentEvents.filter(event => 
+        event.eventName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.hostCompany.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.location?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    return currentEvents;
+  }, [events, showOnlyRSVP, selectedGicsSector, selectedGicsSubSector, selectedCompany, searchQuery, companies]);
+
   if (!canAccessCalendar) {
     return (
       <Layout currentPage="calendar">
@@ -576,33 +603,6 @@ const CalendarPage: React.FC = () => {
     );
     setSearchResults(results);
   };
-
-  const filteredAndSearchedEvents = useMemo(() => {
-    let currentEvents = [...events];
-
-    if (showOnlyRSVP) {
-      currentEvents = currentEvents.filter(event => getRSVPStatus(event.eventID) === 'ACCEPTED');
-    }
-
-    if (selectedGicsSector) {
-      currentEvents = currentEvents.filter(event => event.companyID && companies.find(c => c.companyID === event.companyID)?.gicsSector === selectedGicsSector);
-    }
-    if (selectedGicsSubSector) {
-      currentEvents = currentEvents.filter(event => event.companyID && companies.find(c => c.companyID === event.companyID)?.gicsSubCategory === selectedGicsSubSector);
-    }
-    if (selectedCompany) {
-      currentEvents = currentEvents.filter(event => event.companyID === selectedCompany);
-    }
-    if (searchQuery) {
-      currentEvents = currentEvents.filter(event => 
-        event.eventName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.hostCompany.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.location?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    return currentEvents;
-  }, [events, showOnlyRSVP, selectedGicsSector, selectedGicsSubSector, selectedCompany, searchQuery]);
 
   return (
     <Layout currentPage="calendar">
@@ -1058,8 +1058,8 @@ const CalendarPage: React.FC = () => {
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b-2 border-gold/30 bg-gradient-to-r from-zinc-900 to-black">
                 <div className="flex items-center gap-2">
-                  <CalendarDays className="h-5 w-5 text-gold" />
-                  <h2 className="text-lg font-semibold text-gold truncate">
+                  <CalendarDays className="h-4 w-4 text-gold" />
+                  <h2 className="text-base font-semibold text-gold truncate">
                     {selectedEvent.eventName}
                   </h2>
                 </div>
@@ -1067,9 +1067,9 @@ const CalendarPage: React.FC = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => setEventDetailsOpen(false)}
-                  className="h-8 w-8 p-0 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-zinc-800"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3 w-3" />
                 </Button>
               </div>
 
@@ -1077,8 +1077,8 @@ const CalendarPage: React.FC = () => {
               <div className="flex flex-col h-full pb-16 overflow-y-auto">
                 {/* Event Info */}
                 <div className="p-4 border-b border-zinc-700 bg-zinc-900/30">
-                  <div className="flex gap-2 items-center mb-4">
-                    <Badge className={`${getEventTypeColor(selectedEvent.eventType)}`}>
+                  <div className="flex gap-2 items-center mb-3">
+                    <Badge className={`${getEventTypeColor(selectedEvent.eventType)} text-xs`}>
                       {selectedEvent.eventType.replace('_', ' ')}
                     </Badge>
                     {/* RSVP Status Tag */}
@@ -1094,47 +1094,47 @@ const CalendarPage: React.FC = () => {
                     })()}
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div className="flex items-center text-text-secondary">
-                      <Building2 className="mr-3 h-4 w-4 text-gold flex-shrink-0" />
+                      <Building2 className="mr-2 h-3 w-3 text-gold flex-shrink-0" />
                       <div>
                         <div className="text-xs font-medium text-zinc-400">Company</div>
-                        <div className="text-sm">{selectedEvent.hostCompany || 'TBD'}</div>
+                        <div className="text-xs">{selectedEvent.hostCompany || 'TBD'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center text-text-secondary">
-                      <CalendarDays className="mr-3 h-4 w-4 text-gold flex-shrink-0" />
+                      <CalendarDays className="mr-2 h-3 w-3 text-gold flex-shrink-0" />
                       <div>
                         <div className="text-xs font-medium text-zinc-400">Date & Time</div>
-                        <div className="text-sm">{format(new Date(selectedEvent.startDate), 'EEEE, MMMM d, yyyy')}</div>
+                        <div className="text-xs">{format(new Date(selectedEvent.startDate), 'EEEE, MMMM d, yyyy')}</div>
                         <div className="text-xs text-gold">{format(new Date(selectedEvent.startDate), 'h:mm a')}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center text-text-secondary">
-                      <MapPin className="mr-3 h-4 w-4 text-gold flex-shrink-0" />
+                      <MapPin className="mr-2 h-3 w-3 text-gold flex-shrink-0" />
                       <div>
                         <div className="text-xs font-medium text-zinc-400">Location</div>
-                        <div className="text-sm">{selectedEvent.location || 'TBD'}</div>
+                        <div className="text-xs">{selectedEvent.location || 'TBD'}</div>
                       </div>
                     </div>
 
                     {selectedEvent.endDate && (
                       <div className="flex items-center text-text-secondary">
-                        <Clock className="mr-3 h-4 w-4 text-gold flex-shrink-0" />
+                        <Clock className="mr-2 h-3 w-3 text-gold flex-shrink-0" />
                         <div>
                           <div className="text-xs font-medium text-zinc-400">End Time</div>
-                          <div className="text-sm">{format(new Date(selectedEvent.endDate), 'h:mm a')}</div>
+                          <div className="text-xs">{format(new Date(selectedEvent.endDate), 'h:mm a')}</div>
                         </div>
                       </div>
                     )}
                   </div>
 
                   {selectedEvent.description && (
-                    <div className="mt-4">
+                    <div className="mt-3">
                       <div className="text-xs font-medium text-zinc-400 mb-2">Description</div>
-                      <div className="text-sm text-text-primary bg-zinc-800/50 p-3 rounded border border-zinc-700">
+                      <div className="text-xs text-text-primary bg-zinc-800/50 p-3 rounded border border-zinc-700">
                         {selectedEvent.description}
                       </div>
                     </div>
@@ -1143,7 +1143,7 @@ const CalendarPage: React.FC = () => {
 
                 {/* Weather Forecast for Event Date */}
                 <div className="p-4 border-b border-zinc-700 bg-zinc-800/20">
-                  <div className="text-sm font-medium text-zinc-300 mb-3">Weather Forecast</div>
+                  <div className="text-xs font-medium text-zinc-300 mb-2">Weather Forecast</div>
                   <div className="text-xs text-zinc-400 mb-2">
                     {format(new Date(selectedEvent.startDate), 'EEEE, MMMM d')}
                   </div>
@@ -1162,15 +1162,15 @@ const CalendarPage: React.FC = () => {
                     const WeatherIcon = weather.icon;
                     
                     return (
-                      <div className="flex items-center justify-between p-3 bg-zinc-800/30 rounded border border-zinc-700">
-                        <div className="flex items-center gap-3">
-                          <WeatherIcon className="h-6 w-6 text-gold" />
+                      <div className="flex items-center justify-between p-2 bg-zinc-800/30 rounded border border-zinc-700">
+                        <div className="flex items-center gap-2">
+                          <WeatherIcon className="h-4 w-4 text-gold" />
                           <div>
-                            <div className="text-sm text-zinc-200">{weather.condition}</div>
+                            <div className="text-xs text-zinc-200">{weather.condition}</div>
                             <div className="text-xs text-zinc-400">Perfect for outdoor events</div>
                           </div>
                         </div>
-                        <div className="text-lg font-semibold text-white">{weather.temp}</div>
+                        <div className="text-sm font-semibold text-white">{weather.temp}</div>
                       </div>
                     );
                   })()}
@@ -1178,11 +1178,11 @@ const CalendarPage: React.FC = () => {
 
                 {/* RSVP Section */}
                 <div className="p-4 border-b border-zinc-700 bg-zinc-900/30">
-                  <div className="text-sm font-medium text-zinc-300 mb-3">RSVP</div>
+                  <div className="text-xs font-medium text-zinc-300 mb-2">RSVP</div>
                   {isEventPast(selectedEvent) ? (
                     <Button 
                       variant="secondary" 
-                      className="w-full"
+                      className="w-full text-xs"
                       disabled
                     >
                       Event Ended
@@ -1192,29 +1192,29 @@ const CalendarPage: React.FC = () => {
                       <DropdownMenuTrigger asChild>
                         <Button 
                           variant="default" 
-                          className="w-full"
+                          className="w-full text-xs"
                           disabled={isRSVPing}
                         >
                           {isRSVPing ? 'Updating...' : 'Update RSVP'}
-                          <ChevronDown className="ml-2 h-4 w-4" />
+                          <ChevronDown className="ml-2 h-3 w-3" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="center" className="bg-black border border-zinc-800 z-50">
                         <DropdownMenuItem 
                           onClick={() => handleRSVP('ACCEPTED')}
-                          className="text-success hover:bg-zinc-800"
+                          className="text-success hover:bg-zinc-800 text-xs"
                         >
                           Accept
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                           onClick={() => handleRSVP('DECLINED')}
-                          className="text-error hover:bg-zinc-800"
+                          className="text-error hover:bg-zinc-800 text-xs"
                         >
                           Decline
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                           onClick={() => handleRSVP('TENTATIVE')}
-                          className="text-warning hover:bg-zinc-800"
+                          className="text-warning hover:bg-zinc-800 text-xs"
                         >
                           Tentative
                         </DropdownMenuItem>
@@ -1225,7 +1225,7 @@ const CalendarPage: React.FC = () => {
 
                 {/* Events for Same Date */}
                 <div className="p-4 border-b border-zinc-700 flex-1 bg-zinc-800/20">
-                  <div className="text-sm font-medium text-zinc-300 mb-3">
+                  <div className="text-xs font-medium text-zinc-300 mb-2">
                     Other Events on {format(new Date(selectedEvent.startDate), 'MMM d')}
                   </div>
                   {(() => {
@@ -1271,8 +1271,8 @@ const CalendarPage: React.FC = () => {
 
                 {/* Analyst Insights Section */}
                 <div className="p-4 border-b border-zinc-700 bg-zinc-900/40">
-                  <div className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-gold" />
+                  <div className="text-xs font-medium text-zinc-300 mb-2 flex items-center gap-2">
+                    <TrendingUp className="h-3 w-3 text-gold" />
                     Analyst Insights
                   </div>
                   

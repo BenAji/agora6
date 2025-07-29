@@ -38,13 +38,8 @@ const Auth: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      // Redirect based on user role
-      if (profile?.role === 'IR_ADMIN') {
-        navigate('/dashboard');
-      } else {
-        // Non-admin users go to events page
-        navigate('/events');
-      }
+      // Redirect all users to calendar page
+      navigate('/calendar');
     }
   }, [user, profile, navigate]);
 
