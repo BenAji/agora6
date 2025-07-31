@@ -14,6 +14,7 @@ import Calendar from "./pages/Calendar";
 import Companies from "./pages/Companies";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
+
 import AccessDenied from "./pages/AccessDenied";
 import NotFound from "./pages/NotFound";
 
@@ -83,6 +84,7 @@ const AppWithAuth = () => {
             <Route path="/companies" element={<ProtectedRoute><Companies /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+
             <Route path="/access-denied" element={<AccessDenied />} />
             <Route path="*" element={<NotFound />} />
     </Routes>

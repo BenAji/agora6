@@ -142,12 +142,18 @@ export const useSubscriptions = () => {
       // Update local state
       setSubscriptions(prev => {
         const actualGicsSubCategory = tickerSymbol ? `COMPANY:${tickerSymbol}` : gicsSubCategory;
-        return prev.filter(sub => 
+        const filtered = prev.filter(sub => 
           !(sub.gicsSector === gicsSector && 
             sub.status === 'ACTIVE' && 
             (actualGicsSubCategory ? sub.gicsSubCategory === actualGicsSubCategory : !sub.gicsSubCategory))
         );
+        return filtered;
       });
+      
+      // Force refresh data after a short delay to ensure UI updates
+      setTimeout(() => {
+        fetchData();
+      }, 100);
     } catch (error) {
       console.error('Error unsubscribing:', error);
       toast.error('Failed to unsubscribe');

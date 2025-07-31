@@ -35,10 +35,10 @@ SET "hostCompany" = CASE
   WHEN "hostCompany" = 'Tesla' THEN 'Tesla Inc.'
   
   -- NVIDIA variations
-  WHEN "hostCompany" = 'NVIDIA Corp.' THEN 'Nvidia'
-  WHEN "hostCompany" = 'NVIDIA Corp' THEN 'Nvidia'
-  WHEN "hostCompany" = 'NVIDIA' THEN 'Nvidia'
-  WHEN "hostCompany" = 'NVIDIA Corporation' THEN 'Nvidia'
+  WHEN "hostCompany" = 'NVIDIA Corp.' THEN 'NVIDIA'
+  WHEN "hostCompany" = 'NVIDIA Corp' THEN 'NVIDIA'
+  WHEN "hostCompany" = 'NVIDIA' THEN 'NVIDIA'
+  WHEN "hostCompany" = 'NVIDIA Corporation' THEN 'NVIDIA'
   
   -- AMD variations
   WHEN "hostCompany" = 'Advanced Micro Devices Inc.' THEN 'Advanced Micro Devices'

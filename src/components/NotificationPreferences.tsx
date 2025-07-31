@@ -6,8 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Bell, Mail, Smartphone, Monitor, Building2, Globe, Clock, Calendar } from 'lucide-react';
-import NotificationTestButton from './NotificationTestButton';
+import { Bell, Mail, Smartphone, Monitor, Building2, Globe, Clock, Calendar, Send } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -57,6 +56,7 @@ export const NotificationPreferences: React.FC = () => {
   const [gicsData, setGicsData] = useState<GicsCompany[]>([]);
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [selectedGicsSectors, setSelectedGicsSectors] = useState<string[]>([]);
+  const [notificationLogs, setNotificationLogs] = useState<any[]>([]);
   const { profile } = useAuth();
   const { toast } = useToast();
 
@@ -77,7 +77,7 @@ export const NotificationPreferences: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [companiesResponse, gicsResponse] = await Promise.all([
+      const [companiesResponse, gicsResponse, preferencesResponse, logsResponse] = await Promise.all([
         // Fetch companies
         supabase
           .from('user_companies')
@@ -88,27 +88,46 @@ export const NotificationPreferences: React.FC = () => {
         supabase
           .from('gics_companies')
           .select('gicsSector, gicsSubCategory')
-          .order('gicsSector')
+          .order('gicsSector'),
+
+        // Fetch user's notification preferences from database
+        supabase
+          .from('notification_preferences')
+          .select('*')
+          .eq('user_id', profile.id),
+
+        // Fetch recent notification logs
+        supabase
+          .from('notification_log')
+          .select('*')
+          .eq('user_id', profile.id)
+          .order('created_at', { ascending: false })
+          .limit(5)
       ]);
 
       if (companiesResponse.error) throw companiesResponse.error;
       if (gicsResponse.error) throw gicsResponse.error;
+      if (preferencesResponse.error) throw preferencesResponse.error;
+      if (logsResponse.error) throw logsResponse.error;
 
       setCompanies(companiesResponse.data || []);
       setGicsData(gicsResponse.data || []);
+      setNotificationLogs(logsResponse.data || []);
 
-      // Load preferences from localStorage
-      const savedPreferences = localStorage.getItem(`notification_preferences_${profile?.id}`);
-      if (savedPreferences) {
-        const parsed = JSON.parse(savedPreferences);
-        if (parsed.preferences) {
-          updateSettingsFromPreferences(parsed.preferences);
-        }
-        if (parsed.companies) {
-          setSelectedCompanies(parsed.companies);
-        }
-        if (parsed.gicsSectors) {
-          setSelectedGicsSectors(parsed.gicsSectors);
+      // Load preferences from database
+      if (preferencesResponse.data) {
+        updateSettingsFromPreferences(preferencesResponse.data);
+        
+        // Extract companies and GICS sectors from preferences
+        const prefs = preferencesResponse.data;
+        if (prefs.length > 0) {
+          const firstPref = prefs[0]; // All preferences should have same companies/GICS
+          if (firstPref.companies && Array.isArray(firstPref.companies)) {
+            setSelectedCompanies(firstPref.companies);
+          }
+          if (firstPref.gics_sectors && Array.isArray(firstPref.gics_sectors)) {
+            setSelectedGicsSectors(firstPref.gics_sectors);
+          }
         }
       }
 
@@ -116,7 +135,7 @@ export const NotificationPreferences: React.FC = () => {
       const { data: subscriptions } = await supabase
         .from('subscriptions')
         .select('gicsSector, gicsSubCategory')
-        .eq('userID', profile?.id)
+        .eq('userID', profile.id)
         .eq('status', 'ACTIVE');
 
       if (subscriptions) {
@@ -136,11 +155,11 @@ export const NotificationPreferences: React.FC = () => {
      }
   };
 
-  const updateSettingsFromPreferences = (prefs: NotificationPreference[]) => {
+  const updateSettingsFromPreferences = (prefs: any[]) => {
     const settings = { ...notificationSettings };
     prefs.forEach(pref => {
-      if (settings[pref.notification_type]) {
-        settings[pref.notification_type] = {
+      if (settings[pref.notification_type as keyof typeof settings]) {
+        settings[pref.notification_type as keyof typeof settings] = {
           enabled: pref.enabled,
           frequency: pref.frequency_days
         };
@@ -190,33 +209,168 @@ export const NotificationPreferences: React.FC = () => {
         notification_type: type as 'email' | 'sms' | 'desktop' | 'mobile',
         enabled: settings.enabled,
         frequency_days: settings.frequency,
-        gics_sectors: selectedGicsSectors,
-        companies: selectedCompanies,
+        gics_sectors: selectedGicsSectors.length > 0 ? selectedGicsSectors : null,
+        companies: selectedCompanies.length > 0 ? selectedCompanies : null,
       }));
 
-      // For now, we'll just save to localStorage since the table might not exist
-      // In production, you'd want to create the notification_preferences table
-      localStorage.setItem(`notification_preferences_${profile.id}`, JSON.stringify({
-        preferences: preferencesToSave,
-        companies: selectedCompanies,
-        gicsSectors: selectedGicsSectors,
-        updatedAt: new Date().toISOString()
-      }));
+  
+
+      // Delete existing preferences for this user
+      const { error: deleteError } = await supabase
+        .from('notification_preferences')
+        .delete()
+        .eq('user_id', profile.id);
+
+      if (deleteError) {
+        console.error('Error deleting existing preferences:', deleteError);
+        throw deleteError;
+      }
+
+      // Insert new preferences
+      const { error: insertError } = await supabase
+        .from('notification_preferences')
+        .insert(preferencesToSave);
+
+      if (insertError) {
+        console.error('Error inserting new preferences:', insertError);
+        throw insertError;
+      }
 
       toast({
-        title: "Preferences Saved",
-        description: "Your notification preferences have been updated",
+        title: "✅ Preferences Saved",
+        description: `Updated ${preferencesToSave.length} notification types`,
       });
 
     } catch (error) {
       console.error('Error saving preferences:', error);
       toast({
-        title: "Error",
-        description: "Failed to save notification preferences",
+        title: "❌ Error",
+        description: "Failed to save notification preferences. Check console for details.",
         variant: "destructive",
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const sendRealNotification = async () => {
+    try {
+      
+
+      // Fetch upcoming events for this user from the events table
+      const { data: events, error: eventsError } = await supabase
+        .from('events')
+        .select(`
+          *,
+          gics_companies!inner(
+            tickerSymbol,
+            companyName,
+            gicsSector,
+            gicsSubCategory
+          )
+        `)
+        .gte('startDate', new Date().toISOString())
+        .lte('startDate', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()) // Next 7 days
+        .order('startDate', { ascending: true })
+        .limit(3);
+
+      if (eventsError) {
+        console.error('❌ Error fetching events:', eventsError);
+        toast({
+          title: "❌ Error",
+          description: "Failed to fetch events for notification",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!events || events.length === 0) {
+        toast({
+          title: "ℹ️ No Events",
+          description: "No upcoming events found for notification",
+        });
+        return;
+      }
+
+      
+
+      // Get user's email from Supabase auth
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user?.email) {
+        toast({
+          title: "❌ Error",
+          description: "Could not get user email address",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Prepare notification data
+      const notificationData = {
+        userId: profile.id,
+        notificationType: 'email',
+        events: events.map(event => ({
+          eventID: event.eventID,
+          eventName: event.eventName,
+          eventType: event.eventType,
+          hostCompany: event.gics_companies?.companyName || 'Unknown Company',
+          startDate: event.startDate,
+          location: event.location || 'TBD',
+          description: event.description || 'No description available'
+        })),
+        userProfile: {
+          first_name: profile.first_name || 'User',
+          last_name: profile.last_name || '',
+          user_id: user.email // Use actual email address instead of UUID
+        },
+        frequencyDays: 1
+      };
+
+      
+
+      // Call the send-notification edge function
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify(notificationData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Edge function error:', response.status, errorText);
+        toast({
+          title: "❌ Notification Failed",
+          description: `Failed to send notification: ${response.status}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const result = await response.json();
+      
+
+      toast({
+        title: "✅ Notification Sent",
+        description: `Sent notification for ${events.length} upcoming event${events.length > 1 ? 's' : ''}`,
+      });
+
+      // Refresh notification logs
+      fetchData();
+
+    } catch (error) {
+      console.error('❌ Error sending real notification:', error);
+      toast({
+        title: "❌ Error",
+        description: "Failed to send notification",
+        variant: "destructive",
+      });
     }
   };
 
@@ -374,13 +528,107 @@ export const NotificationPreferences: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Status Summary */}
+      <Card className="bg-surface-primary border-border-default">
+        <CardHeader>
+          <CardTitle className="flex items-center text-text-primary">
+            <Bell className="mr-2 h-5 w-5 text-gold" />
+            Current Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium">Notification Types</Label>
+              <div className="text-sm text-text-muted mt-1">
+                {Object.entries(notificationSettings)
+                  .filter(([_, settings]) => settings.enabled)
+                  .map(([type, settings]) => (
+                    <div key={type} className="flex items-center space-x-2">
+                      <span className="w-2 h-2 bg-gold rounded-full"></span>
+                      <span>{type.charAt(0).toUpperCase() + type.slice(1)} ({settings.frequency} day{settings.frequency > 1 ? 's' : ''})</span>
+                    </div>
+                  ))}
+                {Object.entries(notificationSettings).filter(([_, settings]) => settings.enabled).length === 0 && (
+                  <span className="text-text-muted">No notification types enabled</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Filters</Label>
+              <div className="text-sm text-text-muted mt-1">
+                {selectedCompanies.length > 0 && (
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    <span>{selectedCompanies.length} company{selectedCompanies.length > 1 ? 'ies' : 'y'}</span>
+                  </div>
+                )}
+                {selectedGicsSectors.length > 0 && (
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                    <span>{selectedGicsSectors.length} GICS sector{selectedGicsSectors.length > 1 ? 's' : ''}</span>
+                  </div>
+                )}
+                {selectedCompanies.length === 0 && selectedGicsSectors.length === 0 && (
+                  <span className="text-text-muted">No filters applied (all events)</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Notification Logs */}
+      {notificationLogs.length > 0 && (
+        <Card className="bg-surface-primary border-border-default">
+          <CardHeader>
+            <CardTitle className="flex items-center text-text-primary">
+              <Clock className="mr-2 h-5 w-5 text-gold" />
+              Recent Notifications
+            </CardTitle>
+            <p className="text-sm text-text-muted">
+              Your recent notification activity
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {notificationLogs.map((log) => (
+                <div key={log.id} className="flex items-center justify-between p-2 bg-surface-secondary rounded">
+                  <div className="flex items-center space-x-2">
+                    <span className={`w-2 h-2 rounded-full ${
+                      log.status === 'sent' ? 'bg-green-500' : 
+                      log.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500'
+                    }`}></span>
+                    <span className="text-sm font-medium capitalize">{log.notification_type}</span>
+                    <span className="text-xs text-text-muted">
+                      {new Date(log.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <span className="text-xs text-text-muted">
+                    {log.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Action Buttons */}
       <div className="flex justify-between items-center">
-        <NotificationTestButton />
+        <Button 
+          onClick={sendRealNotification}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+          size="sm"
+        >
+          <Send className="mr-2 h-4 w-4" />
+          Push Notification
+        </Button>
         <Button 
           onClick={savePreferences}
           disabled={saving}
           className="bg-gold hover:bg-gold-hover"
+          size="sm"
         >
           {saving ? 'Saving...' : 'Save Preferences'}
         </Button>

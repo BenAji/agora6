@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Settings as SettingsIcon, User, Bell, Shield, Palette, Database, Users, Building, Globe, ChevronDown, ChevronRight, Plus, CalendarDays } from 'lucide-react';
+import NotificationPreferences from '@/components/NotificationPreferences';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -142,12 +143,7 @@ const Settings: React.FC = () => {
     autoRefresh: false, // auto-refresh every 5 minutes
   });
 
-  // Notification preferences state
-  const [notificationPreferences, setNotificationPreferences] = useState({
-    emailNotifications: true,
-    eventReminders: true,
-    rsvpUpdates: true,
-  });
+  // Notification preferences are now handled by the NotificationPreferences component
 
   // When a company is selected, set the location if available
   useEffect(() => {
@@ -241,9 +237,7 @@ const Settings: React.FC = () => {
 
       if (error) throw error;
       
-      console.log('=== Debug: fetchGicsCompanies ===');
-      console.log('GICS Companies fetched:', data?.length || 0);
-      console.log('Sample GICS companies:', data?.slice(0, 3));
+
       
       setGicsCompanies(data || []);
     } catch (error) {
@@ -261,9 +255,7 @@ const Settings: React.FC = () => {
   const fetchUserSubscriptions = async () => {
     if (!profile) return;
     
-    console.log('=== Debug: fetchUserSubscriptions ===');
-    console.log('Profile user_id:', profile.user_id);
-    console.log('GICS Companies count:', gicsCompanies.length);
+
     
     try {
       const { data, error } = await supabase
@@ -274,8 +266,7 @@ const Settings: React.FC = () => {
 
       if (error) throw error;
       
-      console.log('Raw subscription data:', data);
-      console.log('Subscription count:', data?.length || 0);
+
       
       // Create a Set of ticker symbols for companies that the user is subscribed to
       const subscribedTickers = new Set<string>();
@@ -283,31 +274,24 @@ const Settings: React.FC = () => {
       if (data) {
         // For each subscription, find the corresponding companies and add their ticker symbols
         for (const subscription of data) {
-          console.log('Processing subscription:', subscription);
-          
           if (subscription.gicsSubCategory?.startsWith('COMPANY:')) {
             // Individual company subscription
             const tickerSymbol = subscription.gicsSubCategory.replace('COMPANY:', '');
-            console.log(`Individual company subscription: ${tickerSymbol}`);
             subscribedTickers.add(tickerSymbol);
           } else {
             // Sector/subsector subscription
             const matchingCompanies = gicsCompanies.filter(company => {
               // Sector-level subscription (covers all companies in the sector)
               if (subscription.gicsSector === company.gicsSector && !subscription.gicsSubCategory) {
-                console.log(`Sector match: ${company.tickerSymbol} matches sector ${subscription.gicsSector}`);
                 return true;
               }
               // Subsector-level subscription (covers all companies in the subsector)
               if (subscription.gicsSector === company.gicsSector && 
                   subscription.gicsSubCategory === company.gicsSubCategory) {
-                console.log(`Subsector match: ${company.tickerSymbol} matches ${subscription.gicsSector}:${subscription.gicsSubCategory}`);
                 return true;
               }
               return false;
             });
-            
-            console.log(`Found ${matchingCompanies.length} matching companies for subscription:`, subscription);
             
             matchingCompanies.forEach(company => {
               subscribedTickers.add(company.tickerSymbol);
@@ -316,7 +300,7 @@ const Settings: React.FC = () => {
         }
       }
       
-      console.log('Final subscribed tickers:', Array.from(subscribedTickers));
+
       setSelectedGics(subscribedTickers);
     } catch (error) {
       console.error('Error fetching subscriptions:', error);
@@ -1005,37 +989,8 @@ const Settings: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               {notificationSectionOpen && (
-                <CardContent className="space-y-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-xs">Email Notifications</Label>
-                      <p className="text-xs text-text-muted">Receive email notifications for events</p>
-                    </div>
-                    <Switch
-                      checked={notificationPreferences.emailNotifications}
-                      onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, emailNotifications: checked }))}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-xs">Event Reminders</Label>
-                      <p className="text-xs text-text-muted">Get reminded about upcoming events</p>
-                    </div>
-                    <Switch
-                      checked={notificationPreferences.eventReminders}
-                      onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, eventReminders: checked }))}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-xs">RSVP Updates</Label>
-                      <p className="text-xs text-text-muted">Notifications for RSVP status changes</p>
-                    </div>
-                    <Switch
-                      checked={notificationPreferences.rsvpUpdates}
-                      onCheckedChange={(checked) => setNotificationPreferences(prev => ({ ...prev, rsvpUpdates: checked }))}
-                    />
-                  </div>
+                <CardContent className="p-0">
+                  <NotificationPreferences />
                 </CardContent>
               )}
             </Card>

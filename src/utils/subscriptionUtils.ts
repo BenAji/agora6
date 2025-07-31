@@ -18,6 +18,8 @@ export interface Subscription {
   status: string;
   gicsSector?: string;
   gicsSubCategory?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SubscriptionFilters {
@@ -42,7 +44,7 @@ export const isSubscribedToCompany = (
   subscriptions: Subscription[], 
   userProfileId?: string
 ): boolean => {
-  return subscriptions.some(sub => 
+  const isSubscribed = subscriptions.some(sub => 
     sub.userID === userProfileId && 
     sub.status === 'ACTIVE' &&
     (
@@ -54,6 +56,10 @@ export const isSubscribedToCompany = (
       (sub.gicsSector === company.gicsSector && sub.gicsSubCategory === company.gicsSubCategory)
     )
   );
+  
+
+  
+  return isSubscribed;
 };
 
 export const isSubscribedToSector = (

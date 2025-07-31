@@ -253,12 +253,7 @@ const CalendarPage: React.FC = () => {
       setUserRSVPs(userRSVPsData);
 
       // Debug logs
-      console.log('Fetched events:', fetchedEvents.length);
-      console.log('Filtered companies:', filteredCompanies.length);
-      console.log('User RSVPs:', userRSVPsData.length);
-      console.log('Show only RSVP:', showOnlyRSVP);
-      console.log('Sample events:', fetchedEvents.slice(0, 3));
-      console.log('Sample companies:', filteredCompanies.slice(0, 3));
+      
     } catch (error) {
       console.error('Error fetching calendar data:', error);
     } finally {

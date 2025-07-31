@@ -27,7 +27,7 @@ const Dashboard: React.FC = () => {
       // Fetch user-specific RSVPs if user is logged in
       let userRsvps: any[] = [];
       if (profile) {
-        console.log('Fetching user RSVPs for profile:', { profileId: profile.id, userId: profile.user_id });
+    
         
         // Try profile.id first, then profile.user_id if no results
         let { data: rsvps, error: rsvpsError } = await supabase
@@ -44,11 +44,10 @@ const Dashboard: React.FC = () => {
           
           rsvps = rsvps2;
           rsvpsError = rsvpsError2;
-          console.log('Tried profile.user_id for RSVPs:', { rsvps: rsvps2, rsvpsError: rsvpsError2 });
+
         }
         
         userRsvps = rsvps || [];
-        console.log('User RSVPs found:', userRsvps.length);
       }
       
       // Fetch all RSVPs for total count

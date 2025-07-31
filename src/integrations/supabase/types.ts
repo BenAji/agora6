@@ -253,6 +253,98 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_preferences: {
+        Row: {
+          id: string
+          user_id: string
+          notification_type: string
+          enabled: boolean
+          frequency_days: number
+          gics_sectors: string[] | null
+          companies: string[] | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          notification_type: string
+          enabled?: boolean
+          frequency_days?: number
+          gics_sectors?: string[] | null
+          companies?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          notification_type?: string
+          enabled?: boolean
+          frequency_days?: number
+          gics_sectors?: string[] | null
+          companies?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      notification_log: {
+        Row: {
+          id: string
+          user_id: string
+          notification_type: string
+          event_id: string | null
+          status: string
+          message: string | null
+          sent_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          notification_type: string
+          event_id?: string | null
+          status: string
+          message?: string | null
+          sent_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          notification_type?: string
+          event_id?: string | null
+          status?: string
+          message?: string | null
+          sent_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["eventID"]
+          }
+        ]
+      }
       users: {
         Row: {
           companyID: string | null

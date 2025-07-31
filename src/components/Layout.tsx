@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Building2, Calendar, Users, Settings, BarChart3, LogOut, ChevronDown, User, CalendarDays } from 'lucide-react';
+import { Building2, Calendar, Users, Settings, BarChart3, LogOut, ChevronDown, User, CalendarDays, Bell } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   DropdownMenu,
@@ -105,6 +105,7 @@ const Layout = ({ children, currentPage = 'calendar' }: LayoutProps) => {
                   <span>Settings</span>
                 </Link>
               </DropdownMenuItem>
+
               <DropdownMenuItem asChild>
                 <Link to="/users" className="flex items-center space-x-2 cursor-pointer hover:text-gold transition-colors">
                   <Users className="h-4 w-4" />
