@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Eye, EyeOff, Building2, Users } from 'lucide-react';
+import Footer from '@/components/Footer';
 
 const Auth: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -74,9 +75,10 @@ const Auth: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
-      {showSignupSuccess ? (
-        <div className="w-full max-w-md space-y-6">
+    <div className="min-h-screen bg-black flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        {showSignupSuccess ? (
+          <div className="w-full max-w-md space-y-6">
           <div className="text-center space-y-3">
             <div className="flex items-center justify-center space-x-3 mb-4">
               <div className="w-12 h-12 bg-green-500 flex items-center justify-center">
@@ -129,20 +131,18 @@ const Auth: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-        </div>
-      ) : (
-        <div className="w-full max-w-md space-y-6">
+          </div>
+        ) : (
+          <div className="w-full max-w-md space-y-6">
         {/* Header */}
         <div className="text-center space-y-3">
-          <div className="flex items-center justify-center space-x-3 mb-4">
-            <div className="w-12 h-12 bg-yellow-400 flex items-center justify-center">
-              <span className="text-white font-bold text-xl">A</span>
-            </div>
+          <Link to="/" className="flex items-center justify-center space-x-3 mb-4 hover:opacity-80 transition-opacity">
+            <img src="/logo-square.svg" alt="AGORA" className="w-12 h-12" />
             <div>
               <h1 className="text-2xl font-bold text-white">AGORA</h1>
               <p className="text-xs text-gray-400 uppercase tracking-wide">Event Coordination Platform</p>
             </div>
-          </div>
+          </Link>
           <p className="text-gray-300 text-sm">
             Professional event coordination platform for investment analysts
           </p>
@@ -338,10 +338,14 @@ const Auth: React.FC = () => {
                 </form>
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
+        </div>
+        )}
       </div>
-      )}
+      
+      {/* Footer */}
+      <Footer />
     </div>
   );
 };

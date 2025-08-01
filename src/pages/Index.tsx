@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import Footer from '@/components/Footer';
 import { supabase } from '@/integrations/supabase/client';
 
 const Index: React.FC = () => {
@@ -50,9 +51,7 @@ const Index: React.FC = () => {
       <header className="relative z-20 p-4 border-b border-yellow-400/20 bg-black/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto flex justify-between items-center px-8">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-sm flex items-center justify-center shadow-lg ring-1 ring-yellow-400/20">
-              <span className="text-black font-black text-sm">A</span>
-            </div>
+            <img src="/logo-square.svg" alt="AGORA" className="w-8 h-8 shadow-lg ring-1 ring-yellow-400/20" />
             <div>
               <h1 className="text-lg font-black text-yellow-400 tracking-tight">AGORA</h1>
               <p className="text-xs text-gray-400 font-medium">Event Coordination Platform</p>
@@ -96,9 +95,7 @@ const Index: React.FC = () => {
                   {/* Header */}
                   <div className="flex items-center justify-between border-b border-gray-700/50 pb-4 mb-6">
                     <div className="flex items-center space-x-3">
-                      <div className="w-6 h-6 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded flex items-center justify-center shadow-sm">
-                        <span className="text-black font-black text-xs">A</span>
-                      </div>
+                      <img src="/logo-square.svg" alt="AGORA" className="w-6 h-6 shadow-sm" />
                       <span className="text-yellow-400 font-bold text-sm tracking-wide">Calendar View</span>
                     </div>
                     <div className="text-xs text-gray-400 font-medium">Week 30 - Jul 2025</div>
@@ -309,6 +306,9 @@ const Index: React.FC = () => {
           </div>
         </section>
       </main>
+      
+      {/* Footer */}
+      <Footer />
     </div>
   );
 };

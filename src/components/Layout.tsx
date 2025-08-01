@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import Footer from './Footer';
 
 interface LayoutProps {
   children: ReactNode;
@@ -34,14 +35,12 @@ const Layout = ({ children, currentPage = 'calendar' }: LayoutProps) => {
       <header className="bg-surface-primary border-b border-border-default">
         <div className="flex items-center justify-between px-4 py-2">
           {/* Logo */}
-          <div className="flex items-center space-x-3">
-            <div className="w-6 h-6 bg-gradient-gold rounded-sm flex items-center justify-center">
-              <span className="text-black font-bold text-xs">A</span>
-            </div>
+          <Link to="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+            <img src="/logo-square.svg" alt="AGORA" className="w-6 h-6" />
             <div>
               <h1 className="text-sm font-bold text-gold">AGORA</h1>
             </div>
-          </div>
+          </Link>
           
           {/* Navigation */}
           <nav className="flex items-center space-x-1">
@@ -129,6 +128,9 @@ const Layout = ({ children, currentPage = 'calendar' }: LayoutProps) => {
       <main className="flex-1">
         {children}
       </main>
+      
+      {/* Footer */}
+      <Footer />
     </div>
   );
 };
